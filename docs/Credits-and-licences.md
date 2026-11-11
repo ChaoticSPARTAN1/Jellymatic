@@ -35,8 +35,8 @@ Espressif's binary-only Wi-Fi/PHY libraries and the ESP32 ROM.
 | Jellyfin logo, scaled | `chromatic/launcher/shared/launcher_art.h`, `scripts/chromatic_theme.py` (JELLYFIN_MARK), pictures in `docs/images/` showing it | CC BY-SA 4.0 | © the Jellyfin contributors, from jellyfin/jellyfin-ux. The scaled versions are shared under the same licence. [LICENSES/CC-BY-SA-4.0-Jellyfin-logo.txt](../LICENSES/CC-BY-SA-4.0-Jellyfin-logo.txt) |
 | Roboto Medium, rasterized | `pocket/ui_font.h` (made by `scripts/build_ui_font.py`) | Apache-2.0 | Roboto 2.138 by Christian Robertson, Copyright 2011 Google Inc. [LICENSES/Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
 | T80 CPU core, SameBoy-derived boot ROM | not here: in ModRetro's source, built into the FPGA images 18.40 and 18.41 | BSD-style; MIT | © Daniel Wallner; © Lior Halphon. Their notices go with the images: [LICENSES/BSD-style-T80.txt](../LICENSES/BSD-style-T80.txt), [LICENSES/MIT-SameBoy-boot-ROM.txt](../LICENSES/MIT-SameBoy-boot-ROM.txt) |
-| Press Start 2P font | `scripts/chromatic_gui_fonts/`, `remote-pilot/fonts/` | SIL OFL 1.1 | CodeMan38. [LICENSES/OFL-1.1-PressStart2P.txt](../LICENSES/OFL-1.1-PressStart2P.txt) |
-| Silkscreen font | `scripts/chromatic_gui_fonts/`, `remote-pilot/fonts/` | SIL OFL 1.1 | The Silkscreen Project Authors. [LICENSES/OFL-1.1-Silkscreen.txt](../LICENSES/OFL-1.1-Silkscreen.txt) |
+| Press Start 2P font | `scripts/chromatic_gui_fonts/`, `docs/fonts/`, `remote-pilot/fonts/` | SIL OFL 1.1 | CodeMan38. [LICENSES/OFL-1.1-PressStart2P.txt](../LICENSES/OFL-1.1-PressStart2P.txt) |
+| Silkscreen font | `scripts/chromatic_gui_fonts/`, `docs/fonts/`, `remote-pilot/fonts/` | SIL OFL 1.1 | The Silkscreen Project Authors. [LICENSES/OFL-1.1-Silkscreen.txt](../LICENSES/OFL-1.1-Silkscreen.txt) |
 
 ## Used, not included
 

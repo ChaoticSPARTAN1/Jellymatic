@@ -4,7 +4,8 @@
 [Home](Home.md) › Building from source
 
 **Contents:** [Start-up menu](#start-up-menu) · [Console chip (FPGA) images](#console-chip-fpga-images) ·
-[Chromatic Manager](#chromatic-manager) · [Tests](#tests) · [Previews and pictures](#previews-and-pictures)
+[Chromatic Manager](#chromatic-manager) · [Tests](#tests) · [Previews and pictures](#previews-and-pictures) ·
+[Offline documentation page](#offline-documentation-page)
 
 Everything builds on Windows. Nothing in this page touches a console.
 
@@ -101,3 +102,37 @@ The tests never open a device. Where they need a stock firmware image they use a
 - The console's text font, `pocket\ui_font.h`, is made from Google's Roboto Medium (Apache-2.0) by
   `py -3 scripts\build_ui_font.py --fetch` (needs `fonttools`; the font is pinned by SHA-256 in
   `upstream.lock.json`). `--check` only compares the result with the file in the repository.
+- The README's banner, section headers and dividers are pictures in `docs/images/readme/` (GitHub does not
+  show page styles, so the pixel look travels as images); keep a normal `##` heading under each header
+  picture for screen readers and links.
+
+## Offline documentation page
+
+`Open-Documentation.html` in the main folder is every documentation page in one file that opens by
+double-click, offline. **After editing any `.md` page, rebuild it:**
+
+```powershell
+py -3 scripts\build_docs_html.py           # rewrites Open-Documentation.html
+py -3 scripts\test_docs_html.py            # fails if it is out of date or would load anything from the internet
+```
+
+It needs only Python (no packages). It converts README, `docs\*.md`, CONTRIBUTING, SECURITY,
+THIRD-PARTY-NOTICES and ADDITIONAL-TERMS (only files tracked by Git) and puts them inside the page; the
+pictures and the pixel fonts (`docs\fonts\`, SIL OFL 1.1) load from the repository folder. A new page in
+`docs\` appears under **More** until you add it to a tab in `GROUPS` at the top of the script.
+The same run writes `docs\index.html`, a copy for GitHub Pages (see below).
+
+**The PDF guide** (`docs\Jellymatic-Guide.pdf`, shown by GitHub in the browser) is printed from the same
+pages by Chrome or Edge, offline:
+
+```powershell
+py -3 scripts\build_docs_pdf.py            # rewrites docs\Jellymatic-Guide.pdf and docs\.guide-source.sha256
+```
+
+The test above says when the PDF is out of date (it compares `docs\.guide-source.sha256` with the pages
+and build scripts; it does not print again). Set `DOCS_BROWSER` if Chrome or Edge is not found.
+
+**For maintainers, when the repository is public:** GitHub can host the documentation for free. In the
+repository's Settings > Pages, choose Deploy from a branch, branch `main`, folder `/docs`. The site is then
+`https://chaoticspartan1.github.io/Jellymatic/` (it serves `docs\index.html`; `docs\.nojekyll` makes GitHub
+serve the files as they are). Add a link to it in the README only once it works.

@@ -25,6 +25,10 @@ use [SECURITY.md](SECURITY.md) instead of an issue.
 - Run the tests that cover your change ([docs/Building-from-source.md](docs/Building-from-source.md#tests))
   and say which ones you ran. The tests must never open a device.
 - Plain words in anything a user reads. Keep the pixel style of the console and the Manager.
+- After editing any documentation page, run `py -3 scripts\build_docs_html.py` (Open-Documentation.html and
+  docs/index.html) and `py -3 scripts\build_docs_pdf.py` (the PDF guide); `scripts\test_docs_html.py` checks
+  all three. When the repository is public, GitHub Pages can serve the docs: Settings > Pages, branch `main`,
+  folder `/docs`; the site is `https://chaoticspartan1.github.io/Jellymatic/`.
 - Do not add files you may not share (firmware dumps, ModRetro's or Gowin's files, licences, real media).
 - By contributing you agree that your contribution is licensed under GPL-3.0-or-later with the additional
   attribution term in [ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md).

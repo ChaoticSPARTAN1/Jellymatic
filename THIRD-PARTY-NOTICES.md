@@ -13,8 +13,8 @@ Components by others that are **included in this repository**, with where their 
 | Espressif ESP-IDF bootloader start file | `chromatic/launcher/bootloader_components/main/bootloader_start.c` (modified) | Apache-2.0 | [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt) |
 | Jellyfin logo (jellyfin/jellyfin-ux, commit 69a2b7b1) | scaled in `chromatic/launcher/shared/launcher_art.h`, `scripts/chromatic_theme.py`; shown in `docs/images/jellymatic-icon.png` and console screenshots | CC BY-SA 4.0 | [LICENSES/CC-BY-SA-4.0-Jellyfin-logo.txt](LICENSES/CC-BY-SA-4.0-Jellyfin-logo.txt) |
 | Roboto Medium (Roboto 2.138, Copyright 2011 Google Inc.), rasterized and scaled by `scripts/build_ui_font.py` | `pocket/ui_font.h` | Apache-2.0 | [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt) |
-| Press Start 2P (CodeMan38) | `scripts/chromatic_gui_fonts/heading-PressStart2P-Regular.ttf`, `remote-pilot/fonts/` | SIL OFL 1.1 | [LICENSES/OFL-1.1-PressStart2P.txt](LICENSES/OFL-1.1-PressStart2P.txt) |
-| Silkscreen (The Silkscreen Project Authors) | `scripts/chromatic_gui_fonts/body-Silkscreen-Regular.ttf`, `remote-pilot/fonts/` | SIL OFL 1.1 | [LICENSES/OFL-1.1-Silkscreen.txt](LICENSES/OFL-1.1-Silkscreen.txt) |
+| Press Start 2P (CodeMan38) | `scripts/chromatic_gui_fonts/heading-PressStart2P-Regular.ttf`, `docs/fonts/`, `remote-pilot/fonts/` | SIL OFL 1.1 | [LICENSES/OFL-1.1-PressStart2P.txt](LICENSES/OFL-1.1-PressStart2P.txt) |
+| Silkscreen (The Silkscreen Project Authors) | `scripts/chromatic_gui_fonts/body-Silkscreen-Regular.ttf`, `docs/fonts/`, `remote-pilot/fonts/` | SIL OFL 1.1 | [LICENSES/OFL-1.1-Silkscreen.txt](LICENSES/OFL-1.1-Silkscreen.txt) |
 
 ## Not included, needed to build or run
 

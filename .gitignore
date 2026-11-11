@@ -25,3 +25,5 @@ chromatic-wifi-networks.txt
 *.lic
 *.elf
 *.map
+# Temporary print page of the PDF guide (build_docs_pdf.py deletes it)
+/.guide-print.html

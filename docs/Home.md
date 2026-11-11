@@ -6,6 +6,10 @@
 
 **Jellyfin on your ModRetro Chromatic**, with a start-up menu that keeps your games exactly as they were.
 
+**Read it as one PDF:** [Jellymatic-Guide.pdf](Jellymatic-Guide.pdf) (opens right on GitHub). **Or offline:**
+download or clone the repository, then double-click `Open-Documentation.html` in its main folder. Every
+page here opens in your browser, with pictures, with no internet connection needed.
+
 > Jellymatic is an independent project, not affiliated with ModRetro or the Jellyfin project. Use it at
 > your own risk; support is not guaranteed. "Jellyfin", "ModRetro" and "Chromatic" are trademarks of their
 > owners, used only to say what this works with.

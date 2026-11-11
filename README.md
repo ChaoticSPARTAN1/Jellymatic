@@ -1,21 +1,29 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <p align="center">
-  <img src="docs/images/jellymatic-icon.png" width="176" alt="A green pixel-art Chromatic handheld with the Jellyfin logo on its screen">
+  <img src="docs/images/readme/jellymatic-banner.png" width="100%" alt="Jellymatic: Jellyfin on your ModRetro Chromatic. A pixel-art Chromatic handheld next to a red Chromatic Manager window reading Games + Jellyfin + Pocket link">
 </p>
-<p align="center">
-  <img src="docs/images/jellymatic-logo.png" width="444" alt="Jellymatic">
-</p>
-<h3 align="center">Jellyfin on your ModRetro Chromatic</h3>
 <p align="center">
   A start-up menu for the Chromatic that keeps your games exactly as they are, a Jellyfin app,
   a link to the Analogue Pocket, and a PC tool that installs, checks and undoes everything.
 </p>
+<p align="center">
+  <b>Read the guide:</b> <a href="docs/Jellymatic-Guide.pdf">docs/Jellymatic-Guide.pdf</a> (opens right on GitHub),
+  or download and double-click <code>Open-Documentation.html</code> for the interactive version.
+</p>
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-safety.png" width="100%" alt=""></p>
+
+## Safety
 
 > **Jellymatic is an independent project, not affiliated with ModRetro or the Jellyfin project.**
 > It is not made, endorsed or supported by ModRetro, Analogue or the Jellyfin project. "Jellyfin" is a
 > trademark of its owners; "ModRetro" and "Chromatic" are trademarks of ModRetro, Inc.; they are used here
 > only to say what this project works with. **Use it at your own risk.** It changes firmware on your
 > console. Support is not guaranteed.
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-what-it-is.png" width="100%" alt=""></p>
 
 ## What it is
 
@@ -38,6 +46,9 @@
 
 *All pictures are drawn by the project's own preview renderers with made-up sample data.*
 
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-remote-pilot.png" width="100%" alt=""></p>
+
 ## Remote Pilot: your Chromatic on your PC screen
 
 [**Remote Pilot**](https://github.com/ChaoticSPARTAN1/RemotePilot) lets you **see and control the
@@ -57,6 +68,9 @@ Why it is included:
 It is **optional**, stays **on your own PC and network** by default, and is **never needed** to watch
 Jellyfin. Full documentation: [RemotePilot](https://github.com/ChaoticSPARTAN1/RemotePilot) and
 [docs/Remote-Pilot.md](docs/Remote-Pilot.md).
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-quick-start.png" width="100%" alt=""></p>
 
 ## Quick start (plain English)
 
@@ -78,11 +92,25 @@ Jellyfin. Full documentation: [RemotePilot](https://github.com/ChaoticSPARTAN1/R
 Something went wrong? [Recovery](docs/Recovery.md) explains what the Manager does by itself, and how to put
 everything back, including with ModRetro's **official** update tool.
 
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-docs.png" width="100%" alt=""></p>
+
 ## Documentation (wiki)
 
 Start at **[docs/Home.md](docs/Home.md)**. Pages: What you need · Before you start · Install with Chromatic
 Manager · First run on the console · Using Jellyfin on the Chromatic · Hosting Jellyfin · Pocket link ·
 Remote Pilot · Recovery · FAQ · Building from source · AI prompt examples · Credits & licences.
+
+**As one PDF:** [docs/Jellymatic-Guide.pdf](docs/Jellymatic-Guide.pdf) holds every page, with a clickable table
+of contents; GitHub shows it right in the browser.
+
+**Offline:** download or clone this repository, then double-click **`Open-Documentation.html`** in its main
+folder. It opens every page above in your browser, with pictures, without a server or an internet
+connection (keep it in the repository folder: it loads the pictures from `docs/`). It is built from the
+Markdown pages by `scripts/build_docs_html.py` (the PDF by `scripts/build_docs_pdf.py`).
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-in-this-repo.png" width="100%" alt=""></p>
 
 ## What is in this repository
 
@@ -106,11 +134,17 @@ not match the SHA-256 pins the Manager checks, so it is refused (see [What you n
 Your own files (Wi-Fi list, Jellyfin sign-in, backups) live in a per-user folder, `%LOCALAPPDATA%\Jellymatic`,
 created on first run and never part of Git.
 
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-sibling-projects.png" width="100%" alt=""></p>
+
 ## Sibling projects
 
 - [PocketFin](https://github.com/ChaoticSPARTAN1/PocketFin): Jellyfin on the Analogue Pocket (the Pocket side of the Pocket link).
 - [Jellymatic](https://github.com/ChaoticSPARTAN1/Jellymatic): this project.
 - [RemotePilot](https://github.com/ChaoticSPARTAN1/RemotePilot): Remote Pilot, the full PC remote-control tool.
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-licence.png" width="100%" alt=""></p>
 
 ## Licence
 
@@ -122,11 +156,17 @@ binary-only Wi-Fi/PHY libraries and the ESP32 ROM.
 Parts made by others keep their own licences; see [NOTICE](NOTICE), [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 and [Credits & licences](docs/Credits-and-licences.md).
 
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-contributing.png" width="100%" alt=""></p>
+
 ## Contributing and security
 
 Pull requests, bug fixes and bug reports are welcome: [CONTRIBUTING.md](CONTRIBUTING.md). To report a
 security problem privately: [SECURITY.md](SECURITY.md). Never post Wi-Fi details, server addresses, tokens
 or logs with addresses.
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-credits.png" width="100%" alt=""></p>
 
 ## Credits
 
