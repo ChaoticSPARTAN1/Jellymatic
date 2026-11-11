@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Chromatic Manager (PC). Exact versions it was tested with. Installed by Setup-Jellymatic.ps1 into
+# a private virtual environment in your per-user folder (%LOCALAPPDATA%\Jellymatic\venv).
+PySide6-Essentials==6.12.0   # the window (Qt for Python, LGPL-3.0)
+esptool==4.12.0              # ESP32 read/write over USB (GPL-2.0-or-later)
+pyserial==3.5                # USB serial (BSD-3-Clause)

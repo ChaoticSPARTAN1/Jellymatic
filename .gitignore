@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Build outputs and downloaded sources (never committed)
+/staging/
+/upstream/
+/release/
+/dist/
+/build/
+fpga/images/*/build/*.fs
+fpga/images/*/build/*.bin
+__pycache__/
+*.pyc
+
+# Anything personal (normally in %LOCALAPPDATA%\Jellymatic, never here)
+/private/
+remote-pilot/local/
+jellyfin-connection.txt
+chromatic-wifi-networks.txt
+*.local.txt
+.env
+.env.*
+
+# Firmware, dumps, licences: never in Git
+*.bin
+*.fs
+*.lic
+*.elf
+*.map

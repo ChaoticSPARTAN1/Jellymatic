@@ -1,0 +1,396 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+   Additional terms (author attribution, GPLv3 section 7(b)): see ADDITIONAL-TERMS.md */
+/* Chromatic preset only. Every rule is scoped to body[data-preset="chromatic"], uses .chr-
+   classes, or hides the Chromatic elements on other presets, so other presets keep their look.
+
+   Look: the pixel-art style of the Chromatic Manager PC app (part of Jellymatic), as one family
+   with it: its palette, tab colours, dithered band fade, bevels, speech bubbles, the frame with
+   its thick border in the tab colour, and its logo colours. Fonts: Press Start 2P (headings) and
+   Silkscreen (body), SIL OFL 1.1, unmodified local files in fonts/ (see fonts/LICENCES.txt).
+   The device drawing is a green Chromatic; its colours are in the DEVICE COLOURS block
+   below, the only place to edit to recolour it. */
+@font-face { font-family: 'RP Press Start 2P'; src: url('/fonts/heading-PressStart2P-Regular.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'RP Silkscreen'; src: url('/fonts/body-Silkscreen-Regular.ttf') format('truetype'); font-display: swap; }
+
+body:not([data-preset="chromatic"]) #chromatic-stage,
+body:not([data-preset="chromatic"]) #chromatic-panel,
+body:not([data-preset="chromatic"]) #chromatic-connect-detail,
+body:not([data-preset="chromatic"]) #chromatic-usb-offer { display: none !important; }
+
+body[data-preset="chromatic"] {
+  /* ---- Chromatic Manager palette (chromatic_theme.PALETTE) ---- */
+  --pm-window: #000000; --pm-frame-dim: #666666; --pm-frame-light: #9a9a9a; --pm-frame-shadow: #333333;
+  --pm-tab-idle: #7a7a7a; --pm-text: #ffffff; --pm-text-dim: #999999; --pm-text-faint: #5c5c5c;
+  --pm-red: #ff0000; --pm-orange: #ff9900; --pm-cyan: #00a2ff; --pm-green: #66cb01;   /* tab colours */
+  --pm-ok: #32ff00; --pm-warn: #ffcc00; --pm-error: #ff3b2f; --pm-info: #00a2ff; --pm-link: #12f412;
+  --pm-button: #cccccc; --pm-button-hi: #eeeeee; --pm-button-shade: #8c8c8c;
+  --pm-go: #80ff00; --pm-go-hi: #c8ff8a; --pm-go-shade: #4c9700;
+  --pm-stop: #ff1a1a; --pm-stop-hi: #ff8a8a; --pm-stop-shade: #a00000;
+  --pm-amber: #ffcc00; --pm-amber-hi: #ffe98a; --pm-amber-shade: #b88a00;
+  --pm-off: #3a3a3a; --pm-off-hi: #4a4a4a; --pm-off-shade: #262626; --pm-outline: #111111;
+  --pm-head: 'RP Press Start 2P', Consolas, monospace;
+  --pm-body: 'RP Silkscreen', Consolas, 'Cascadia Mono', monospace;
+  --pm-mono: Consolas, 'Cascadia Mono', 'Lucida Console', monospace;
+
+  /* ==== DEVICE COLOURS: a GREEN Chromatic.
+     Edit only this block to recolour the drawing. ==== */
+  --dev-body: #7cd33a;          /* lime green shell */
+  --dev-body-hi: #9be35e;       /* lit top/left rim */
+  --dev-body-lo: #5fae27;       /* shaded right/bottom rim, recesses round the buttons */
+  --dev-edge: #2c5f12;          /* outline of the shell */
+  --dev-print: #4c9a24;         /* darker-green printed strip under the screen */
+  --dev-bezel: #1c1d20;         /* charcoal glass panel round the screen */
+  --dev-bezel-hi: #2e3035;      /* glass sheen along its top */
+  --dev-bezel-edge: #0c0c0e;    /* glass outline */
+  --dev-lcd: #050506;           /* screen surround */
+  --dev-button: #1d1d1d;        /* matte black D-pad, Select, Start, Menu */
+  --dev-button-hi: #3c3c3c;
+  --dev-button-lo: #070707;
+  --dev-ab: #f2cbc1;            /* pastel pink A and B */
+  --dev-ab-hi: #fff1ec;
+  --dev-ab-lo: #c99b8f;
+  --dev-label: #ffffff;         /* printed white labels */
+  --dev-stripe-1: #f4fbf7;      /* corner stripes, from the corner inward: white, */
+  --dev-stripe-2: #bdefd9;      /*   mint, */
+  --dev-stripe-3: #3aa593;      /*   teal, */
+  --dev-stripe-4: #1d6e5e;      /*   dark teal */
+  --dev-port: #0b0b0c;          /* ports and slots on the edges */
+  --dev-metal: #9a9a9a;         /* connector contacts, power switch knob */
+  --dev-wheel: #262626;         /* volume wheel ridges */
+  --dev-wheel-hi: #575757;
+  --dev-pressed: #00a2ff;       /* a held button lights up in the Manager's info cyan */
+  --dev-side-label: #999999;    /* names of the edge controls, outside the shell */
+
+  --chr-dither: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='40' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M20 0h4v4h-4zM24 0h4v4h-4zM32 0h4v4h-4zM40 0h4v4h-4zM48 0h4v4h-4zM56 0h4v4h-4zM60 0h4v4h-4zM64 0h4v4h-4zM68 0h4v4h-4zM8 4h4v4h-4zM20 4h4v4h-4zM28 4h4v4h-4zM36 4h4v4h-4zM44 4h4v4h-4zM48 4h4v4h-4zM52 4h4v4h-4zM56 4h4v4h-4zM60 4h4v4h-4zM64 4h4v4h-4zM68 4h4v4h-4zM16 8h4v4h-4zM24 8h4v4h-4zM32 8h4v4h-4zM36 8h4v4h-4zM40 8h4v4h-4zM48 8h4v4h-4zM56 8h4v4h-4zM60 8h4v4h-4zM64 8h4v4h-4zM68 8h4v4h-4zM20 12h4v4h-4zM24 12h4v4h-4zM28 12h4v4h-4zM36 12h4v4h-4zM44 12h4v4h-4zM52 12h4v4h-4zM56 12h4v4h-4zM60 12h4v4h-4zM64 12h4v4h-4zM68 12h4v4h-4zM12 16h4v4h-4zM24 16h4v4h-4zM32 16h4v4h-4zM40 16h4v4h-4zM48 16h4v4h-4zM52 16h4v4h-4zM56 16h4v4h-4zM60 16h4v4h-4zM64 16h4v4h-4zM68 16h4v4h-4zM20 20h4v4h-4zM28 20h4v4h-4zM36 20h4v4h-4zM40 20h4v4h-4zM44 20h4v4h-4zM52 20h4v4h-4zM56 20h4v4h-4zM60 20h4v4h-4zM64 20h4v4h-4zM68 20h4v4h-4zM8 24h4v4h-4zM24 24h4v4h-4zM28 24h4v4h-4zM32 24h4v4h-4zM40 24h4v4h-4zM48 24h4v4h-4zM56 24h4v4h-4zM60 24h4v4h-4zM64 24h4v4h-4zM68 24h4v4h-4zM16 28h4v4h-4zM20 28h4v4h-4zM28 28h4v4h-4zM36 28h4v4h-4zM44 28h4v4h-4zM52 28h4v4h-4zM56 28h4v4h-4zM60 28h4v4h-4zM64 28h4v4h-4zM68 28h4v4h-4zM24 32h4v4h-4zM32 32h4v4h-4zM40 32h4v4h-4zM44 32h4v4h-4zM48 32h4v4h-4zM56 32h4v4h-4zM60 32h4v4h-4zM64 32h4v4h-4zM68 32h4v4h-4zM12 36h4v4h-4zM20 36h4v4h-4zM28 36h4v4h-4zM32 36h4v4h-4zM36 36h4v4h-4zM44 36h4v4h-4zM52 36h4v4h-4zM56 36h4v4h-4zM60 36h4v4h-4zM64 36h4v4h-4zM68 36h4v4h-4z'/%3E%3C/svg%3E");
+  --chr-doodles: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480' fill='none' stroke='%232c2c2c' stroke-width='2'%3E%3Crect x='147' y='225' width='20' height='13'/%3E%3Ccircle cx='173' cy='226' r='6'/%3E%3Cpath d='M358 156h22M369 145v22'/%3E%3Crect x='303' y='412' width='14' height='9'/%3E%3Cpath d='M499 458h22M510 447v22'/%3E%3Cpolyline points='129,181 125,192 135,185 123,185 133,192 129,181'/%3E%3Cpolyline points='62,369 58,383 70,374 55,374 67,383 63,369'/%3E%3Cpath d='M412 53h16M420 45v16'/%3E%3Crect x='263' y='403' width='22' height='14'/%3E%3Cpath d='M339 87h22M350 76v22'/%3E%3Cpolyline points='62,151 66,157 71,151 76,157 80,151'/%3E%3Cpolyline points='323,33 326,37 330,33 333,37 336,33'/%3E%3Cpolyline points='276,187 271,202 284,193 267,193 280,202 276,187'/%3E%3Crect x='574' y='358' width='14' height='9'/%3E%3Crect x='411' y='403' width='23' height='15'/%3E%3Cpath d='M339 343h18M348 334v18'/%3E%3Cpolyline points='30,343 36,351 42,343 49,351 55,343'/%3E%3Cpolyline points='428,324 422,341 437,331 418,331 433,341 428,324'/%3E%3Cpolyline points='320,203 313,222 329,210 310,210 326,222 320,203'/%3E%3Crect x='320' y='306' width='14' height='9'/%3E%3Cpath d='M587 416h12M593 410v12'/%3E%3Ccircle cx='570' cy='376' r='7'/%3E%3Crect x='429' y='70' width='21' height='14'/%3E%3Cpath d='M465 164h12M471 158v12'/%3E%3Cpath d='M494 442h23M505 431v23'/%3E%3Cpolyline points='583,38 588,45 594,38 600,45 605,38'/%3E%3C/svg%3E");
+
+  color: var(--pm-text); background: var(--chr-doodles) 0 0 / 640px 480px repeat, var(--pm-window);
+  font: 12px/1.65 var(--pm-body); letter-spacing: .02em;
+}
+
+/* The dual-screen shell and controls have no meaning on this device. */
+body[data-preset="chromatic"] #device,
+body[data-preset="chromatic"] .model-picker,
+body[data-preset="chromatic"] .mouse-hint,
+body[data-preset="chromatic"] .stage > .section-heading,
+body[data-preset="chromatic"] #remote-capture-guide,
+body[data-preset="chromatic"] .stage > .capture-actions,
+body[data-preset="chromatic"] #capture-note,
+body[data-preset="chromatic"] #perf-section,
+body[data-preset="chromatic"] .workspace > .side-stack,
+body[data-preset="chromatic"] #catalog-section,
+body[data-preset="chromatic"] #connect-detail,
+body[data-preset="chromatic"] #request-report,
+body[data-preset="chromatic"] #request-device-log,
+body[data-preset="chromatic"] #intro { display: none !important; }
+
+/* ---- type ---- */
+body[data-preset="chromatic"] h1,
+body[data-preset="chromatic"] h2,
+body[data-preset="chromatic"] h3,
+body[data-preset="chromatic"] summary { font-family: var(--pm-head); font-weight: 400; letter-spacing: 0; }
+body[data-preset="chromatic"] h2 { font-size: 16px; line-height: 1.3; }
+body[data-preset="chromatic"] h3 { font-size: 12px; }
+body[data-preset="chromatic"] .eyebrow { color: var(--pm-warn); font: 12px/1.4 var(--pm-body); letter-spacing: .08em; }
+body[data-preset="chromatic"] .micro,
+body[data-preset="chromatic"] .muted,
+body[data-preset="chromatic"] .latency { color: var(--pm-text-dim); font-size: 12px; }
+body[data-preset="chromatic"] .feedback { color: var(--pm-ok); font-size: 12px; }
+body[data-preset="chromatic"] .feedback.error { color: var(--pm-error); }
+body[data-preset="chromatic"] a { color: var(--pm-link); }
+body[data-preset="chromatic"] a:hover { color: var(--pm-text); }
+
+/* ---- top bar: a pixel tab for the mark, our multicolour name (LOGO_COLOURS) ---- */
+body[data-preset="chromatic"] .topbar { border-bottom: 0; padding-bottom: 6px; }
+body[data-preset="chromatic"] .brand-mark {
+  width: 40px; height: 34px; border-radius: 0; color: var(--pm-text); font: 14px/1 var(--pm-head);
+  background: var(--pm-window); box-shadow: inset 0 0 0 3px var(--pm-red);
+  clip-path: polygon(4px 0, calc(100% - 4px) 0, calc(100% - 2px) 1px, 100% 4px, 100% 100%, 0 100%, 0 4px, 2px 1px);
+}
+body[data-preset="chromatic"] h1 {
+  width: fit-content; font-size: 16px; line-height: 1.4; color: transparent;
+  background: linear-gradient(90deg, #ff4d4d 0 1em, #ff9a3c 1em 2em, #ffd93c 2em 3em, #7ee05a 3em 4em, #3cc8ff 4em 5em,
+    #8f7bff 5em 6em, #ff6ad5 6em 8em, #ff4d4d 8em 9em, #ff9a3c 9em 10em, #ffd93c 10em 11em, #7ee05a 11em 12em,
+    #3cc8ff 12em 13em, #8f7bff 13em) 0 0 / 100% 100% no-repeat;
+  -webkit-background-clip: text; background-clip: text;
+}
+body[data-preset="chromatic"] .preset-picker { color: var(--pm-text-dim); font: 12px var(--pm-body); letter-spacing: .06em; }
+body[data-preset="chromatic"] select,
+body[data-preset="chromatic"] input:not([type="checkbox"]),
+body[data-preset="chromatic"] .theme-editor summary {
+  background: var(--pm-window) !important; color: var(--pm-text) !important; border: 2px solid var(--pm-frame-dim) !important;
+  border-radius: 0 !important; font: 12px/1.4 var(--pm-body); padding: 5px 8px; box-shadow: none;
+}
+body[data-preset="chromatic"] select:focus,
+body[data-preset="chromatic"] input:focus { border-color: var(--pm-button) !important; outline: none; }
+body[data-preset="chromatic"] .theme-swatches { background: var(--pm-window); border: 3px solid var(--pm-frame-dim); border-radius: 0;
+  box-shadow: 5px 5px 0 var(--pm-frame-shadow); }
+body[data-preset="chromatic"] .status,
+body[data-preset="chromatic"] .pill { background: var(--pm-window); color: var(--pm-text); border: 2px solid var(--pm-frame-dim);
+  border-radius: 0; font: 12px/1.3 var(--pm-body); letter-spacing: .04em; }
+body[data-preset="chromatic"] .status i { border-radius: 0; width: 8px; height: 8px; }
+
+/* ---- checkboxes: square pixel boxes, green when on (chromatic_theme.qss QCheckBox) ---- */
+body[data-preset="chromatic"] input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border-radius: 0;
+  background: var(--pm-window); border: 2px solid var(--pm-frame-dim); cursor: pointer;
+}
+body[data-preset="chromatic"] input[type="checkbox"]:checked { background: var(--pm-go); border-color: var(--pm-go-shade);
+  box-shadow: inset 2px 2px 0 var(--pm-go-hi); }
+body[data-preset="chromatic"] input[type="checkbox"]:focus-visible { outline: 2px dashed var(--pm-info); outline-offset: 2px; }
+
+/* ---- pixel buttons: dark outline with cut corners, lit top/left, shaded bottom/right
+        (chromatic_manager_gui.bevel): grey; green to go; red to stop; amber to approve ---- */
+body[data-preset="chromatic"] button:not([data-chr-button]) {
+  --face: var(--pm-button); --hi: var(--pm-button-hi); --shade: var(--pm-button-shade); --ink: #000;
+  background: var(--face) !important; color: var(--ink) !important; border: 2px solid var(--pm-outline) !important;
+  border-radius: 0 !important; box-shadow: inset 2px 2px 0 var(--hi), inset -3px -3px 0 var(--shade) !important;
+  clip-path: polygon(2px 0, calc(100% - 2px) 0, 100% 2px, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0 calc(100% - 2px), 0 2px);
+  font: 12px/1.2 var(--pm-body); font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  padding: 8px 14px 9px; min-height: 34px; filter: none; transform: none; opacity: 1;
+}
+body[data-preset="chromatic"] button:not([data-chr-button]):hover:not(:disabled) { filter: brightness(1.07) !important; }
+body[data-preset="chromatic"] button:not([data-chr-button]):active:not(:disabled) {
+  box-shadow: inset 2px 2px 0 var(--shade), inset -3px -3px 0 var(--hi) !important; padding: 9px 13px 8px 15px; }
+body[data-preset="chromatic"] button:not([data-chr-button]):disabled {
+  --face: var(--pm-off) !important; --hi: var(--pm-off-hi) !important; --shade: var(--pm-off-shade) !important; --ink: #6a6a6a !important;
+  cursor: not-allowed; opacity: 1 !important; }
+body[data-preset="chromatic"] button:not([data-chr-button]):focus-visible { outline: 2px dashed var(--pm-info); outline-offset: 3px; }
+body[data-preset="chromatic"] button.connect-button:not([data-chr-button]),
+body[data-preset="chromatic"] #chr-usb-pair-start { --face: var(--pm-go); --hi: var(--pm-go-hi); --shade: var(--pm-go-shade); }
+body[data-preset="chromatic"] button.connect-button:not([data-chr-button]) { min-height: 52px; min-width: 220px; font-size: 14px; }
+body[data-preset="chromatic"] button.connect-button.connected:not([data-chr-button]) { --face: var(--pm-button); --hi: var(--pm-button-hi); --shade: var(--pm-button-shade); }
+body[data-preset="chromatic"] #chr-mgr-run { --face: var(--pm-stop); --hi: var(--pm-stop-hi); --shade: var(--pm-stop-shade); --ink: #fff; }
+body[data-preset="chromatic"] #chr-usb-offer-buttons button { --face: var(--pm-amber); --hi: var(--pm-amber-hi); --shade: var(--pm-amber-shade); }
+body[data-preset="chromatic"] #chr-sound[aria-pressed="true"] { --face: var(--pm-amber); --hi: var(--pm-amber-hi); --shade: var(--pm-amber-shade); }
+
+/* ---- windows: a thick border in the tab colour round a black body with an inner dark rule,
+        and a header band in that colour with a dithered fade at its right end ---- */
+body[data-preset="chromatic"] .connect-bar { --tone: var(--pm-red); }
+body[data-preset="chromatic"] .stage { --tone: var(--pm-green); }
+body[data-preset="chromatic"] #chromatic-panel { --tone: var(--pm-cyan); }
+body[data-preset="chromatic"] .panel,
+body[data-preset="chromatic"] .connect-bar {
+  position: relative; color: var(--pm-text); background: var(--pm-window) !important; border: 6px solid var(--tone, var(--pm-frame-dim)) !important;
+  border-radius: 0 !important; box-shadow: inset 0 0 0 2px var(--pm-window), inset 0 0 0 3px var(--pm-frame-shadow) !important;
+  clip-path: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px), 0 3px);
+  padding: 20px;
+}
+body[data-preset="chromatic"] .chr-stage-heading,
+body[data-preset="chromatic"] #chromatic-panel > .section-heading {
+  margin: -14px -14px 18px; padding: 8px 84px 8px 12px; border: 0; color: #000;
+  background: var(--chr-dither) right top / 72px 40px repeat-y, var(--tone);
+}
+body[data-preset="chromatic"] .chr-stage-heading h2,
+body[data-preset="chromatic"] #chromatic-panel > .section-heading h2 { color: #000; text-transform: uppercase; overflow-wrap: anywhere; }
+body[data-preset="chromatic"] .chr-stage-heading .eyebrow,
+body[data-preset="chromatic"] #chromatic-panel > .section-heading .eyebrow { color: #000; margin: 0 0 2px; }
+body[data-preset="chromatic"] .chr-stage-heading .pill,
+body[data-preset="chromatic"] #chromatic-panel > .section-heading .pill { border-color: #000; }
+body[data-preset="chromatic"] .connect-copy h2 { color: var(--pm-text); margin: 0 0 6px; }
+body[data-preset="chromatic"] .connect-bar { margin-top: 12px; }
+body[data-preset="chromatic"] #chromatic-connect-detail { color: var(--pm-warn); margin: 4px 0 0; }
+body[data-preset="chromatic"] .chr-simulated { background: var(--pm-stop) !important; color: #fff !important; border-color: #000 !important; }
+
+/* ---- speech bubbles: black with a grey bevelled border, a light top line, a drop shadow
+        and a stepped pointer from the console (chromatic_manager_gui.Bubble) ---- */
+body[data-preset="chromatic"] .chr-bubble,
+body[data-preset="chromatic"] .chr-facts,
+body[data-preset="chromatic"] .chr-section,
+body[data-preset="chromatic"] .chr-perf,
+body[data-preset="chromatic"] .chr-pairing {
+  position: relative; background: var(--pm-window);
+  border: 3px solid transparent; border-image: linear-gradient(var(--pm-frame-light) 0 1px, var(--pm-frame-dim) 1px) 3;
+  box-shadow: 5px 5px 0 var(--pm-frame-shadow); border-radius: 0;
+}
+body[data-preset="chromatic"] .chr-bubble { margin: 22px 5px 22px 0; padding: 14px; display: grid; gap: 12px; }
+body[data-preset="chromatic"] .chr-bubble::before,
+body[data-preset="chromatic"] .chr-facts::before {
+  content: ''; position: absolute; background: var(--pm-frame-dim);
+}
+/* pointer above the controls bubble, from the console down to it */
+body[data-preset="chromatic"] .chr-bubble::before { left: calc(50% - 12px); top: -17px; width: 24px; height: 12px;
+  clip-path: polygon(0 0, 24px 0, 24px 2px, 22px 2px, 22px 4px, 20px 4px, 20px 6px, 18px 6px, 18px 8px, 16px 8px, 16px 10px, 14px 10px,
+    14px 12px, 10px 12px, 10px 10px, 8px 10px, 8px 8px, 6px 8px, 6px 6px, 4px 6px, 4px 4px, 2px 4px, 2px 2px, 0 2px); }
+/* pointer left of the facts bubble, from the console beside it (side-by-side layout only) */
+body[data-preset="chromatic"] .chr-facts::before { display: none; left: -17px; top: 14px; width: 12px; height: 24px;
+  clip-path: polygon(0 0, 2px 0, 2px 2px, 4px 2px, 4px 4px, 6px 4px, 6px 6px, 8px 6px, 8px 8px, 10px 8px, 10px 10px, 12px 10px,
+    12px 14px, 10px 14px, 10px 16px, 8px 16px, 8px 18px, 6px 18px, 6px 20px, 4px 20px, 4px 22px, 2px 22px, 2px 24px, 0 24px); }
+@media (min-width: 951px) { body[data-preset="chromatic"] .chr-facts::before { display: block; } }
+body[data-preset="chromatic"] .chr-bubble .enable-line { background: transparent !important; border: 0 !important; padding: 0; margin: 0; }
+body[data-preset="chromatic"] .enable-line strong { font: 12px/1.4 var(--pm-head); color: var(--pm-text); }
+body[data-preset="chromatic"] .enable-line small { color: var(--pm-warn); font-size: 12px; }
+body[data-preset="chromatic"] .switch-line { font-size: 12px; gap: 8px; }
+
+/* ---- device: the Chromatic, drawn cell by cell (panel.js deviceArt) ---- */
+.chr-stage-heading { margin-bottom: 8px; }
+.chr-device { position: relative; width: min(100%, 440px); aspect-ratio: 70 / 104; margin: 6px auto 0; user-select: none; }
+.chr-device .chr-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.chr-device .chr-at { position: absolute; }
+.chr-device button[data-chr-button] {
+  position: absolute; padding: 0 !important; margin: 0; border: 0 !important; border-radius: 0 !important; min-height: 0 !important;
+  background: transparent !important; box-shadow: none !important; color: transparent !important; font-size: 0 !important;
+  cursor: pointer; opacity: 1 !important; filter: none !important; transform: none !important; transition: none;
+}
+.chr-device button[data-chr-button] svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chr-device button[data-chr-button]:disabled { cursor: not-allowed; }
+.chr-device button[data-chr-button]:disabled svg { filter: saturate(.8) brightness(.92); }
+.chr-device button[data-chr-button]:hover:not(:disabled) svg { filter: brightness(1.15); }
+.chr-device button[data-chr-button]:focus-visible { outline: 2px dashed var(--pm-info); outline-offset: 2px; }
+.chr-device button.active svg { transform: translateY(4%); }
+.chr-device button.active .chr-k-face { fill: var(--dev-pressed); }
+.chr-device button.chord-selected { outline: 2px dashed var(--pm-warn); outline-offset: 2px; }
+.chr-k-body { fill: var(--dev-body); } .chr-k-body-hi { fill: var(--dev-body-hi); } .chr-k-body-lo { fill: var(--dev-body-lo); }
+.chr-k-edge { fill: var(--dev-edge); } .chr-k-print { fill: var(--dev-print); }
+.chr-k-bezel { fill: var(--dev-bezel); } .chr-k-bezel-hi { fill: var(--dev-bezel-hi); } .chr-k-bezel-edge { fill: var(--dev-bezel-edge); }
+.chr-k-lcd { fill: var(--dev-lcd); }
+.chr-k-btn { fill: var(--dev-button); } .chr-k-btn-hi { fill: var(--dev-button-hi); } .chr-k-btn-lo { fill: var(--dev-button-lo); }
+.chr-k-ab { fill: var(--dev-ab); } .chr-k-ab-hi { fill: var(--dev-ab-hi); } .chr-k-ab-lo { fill: var(--dev-ab-lo); }
+.chr-k-stripe-1 { fill: var(--dev-stripe-1); } .chr-k-stripe-2 { fill: var(--dev-stripe-2); }
+.chr-k-stripe-3 { fill: var(--dev-stripe-3); } .chr-k-stripe-4 { fill: var(--dev-stripe-4); }
+.chr-k-port { fill: var(--dev-port); } .chr-k-metal { fill: var(--dev-metal); }
+.chr-k-wheel { fill: var(--dev-wheel); } .chr-k-wheel-hi { fill: var(--dev-wheel-hi); }
+.chr-k-label { fill: var(--dev-label); font-family: var(--pm-body); font-weight: 700; }
+.chr-k-side { fill: var(--dev-side-label); font-family: var(--pm-body); }
+.chr-screen { position: absolute; background: var(--dev-lcd); overflow: hidden; }
+.chr-screen img { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; display: none; }
+.chr-screen.has-image img { display: block; }
+.chr-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 10%; text-align: center;
+  color: var(--pm-text-dim); font: 12px/1.5 var(--pm-body); }
+.chr-screen.has-image .chr-placeholder { display: none; }
+.chr-bezel-top { position: absolute; display: flex; justify-content: center; align-items: center; gap: 6px;
+  color: #8a8a8a; font: 10px/1 var(--pm-body); letter-spacing: .1em; white-space: nowrap; overflow: hidden; }
+.chr-power { flex: none; width: 6px; height: 6px; background: #3a3a3a; }
+.chr-power.on { background: var(--pm-ok); box-shadow: 0 0 6px var(--pm-ok); }
+.chr-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; justify-content: center; }
+#chromatic-stage .micro { text-align: center; margin: 0; }
+.chr-arm { margin: 0; }
+.chr-perf { margin: 18px 5px 5px 0; padding: 10px 12px 12px; }
+.chr-perf .eyebrow { margin-bottom: 6px; }
+.chr-perf canvas { width: 100%; height: 110px; background: var(--pm-window); border: 2px solid var(--pm-frame-shadow); }
+
+/* ---- tools panel ---- */
+.chr-panel h3 { font-size: 12px; margin: 18px 0 8px; }
+.chr-mode { display: flex; align-items: center; gap: 10px; font: 12px var(--pm-head); flex-wrap: wrap; }
+.chr-mode select { flex: 1; min-width: 0; }
+.chr-mode label { white-space: nowrap; }
+.chr-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; margin: 16px 5px 0 0; padding: 12px 14px; font-size: 12px; }
+.chr-facts dt { color: var(--pm-text-dim); } .chr-facts dd { margin: 0; overflow-wrap: anywhere; color: var(--pm-text); }
+.chr-features { display: grid; gap: 10px; }
+.chr-group h4 { margin: 6px 0 8px; font: 12px/1.3 var(--pm-head); text-transform: uppercase; color: var(--pm-warn); }
+.chr-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.chr-features li { display: grid; grid-template-columns: 9.5rem 1fr; gap: 3px 10px; align-items: start;
+  padding: 8px 10px; background: var(--pm-window); border: 2px solid var(--pm-frame-shadow); font-size: 12px; }
+.chr-features strong { font-weight: 400; color: var(--pm-text); }
+.chr-features small { grid-column: 2; color: var(--pm-text-dim); font-size: 12px; }
+.chr-badge { grid-row: span 2; justify-self: start; padding: 2px 7px; font: 12px/1.3 var(--pm-body); border: 2px solid; white-space: nowrap; background: var(--pm-window); }
+.chr-good { color: var(--pm-ok); border-color: var(--pm-ok); } .chr-wait { color: var(--pm-warn); border-color: var(--pm-warn); }
+.chr-off { color: var(--pm-text-dim); border-color: var(--pm-frame-dim); } .chr-launcher { color: var(--pm-info); border-color: var(--pm-info); }
+.chr-fpga { color: var(--pm-orange); border-color: var(--pm-orange); } .chr-manual { color: var(--pm-red); border-color: var(--pm-red); }
+.chr-tail { max-height: 15rem; overflow: auto; margin: 10px 0 0; padding: 10px; background: var(--pm-window); border: 2px solid var(--pm-frame-shadow);
+  font: 12px/1.5 var(--pm-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--pm-text-dim); }
+@media (max-width: 690px) { .chr-features li { grid-template-columns: 1fr; } .chr-features small, .chr-badge { grid-column: 1; grid-row: auto; } }
+
+/* Sections: bubbles with a band in their tab colour: green status, cyan logs and console,
+   orange for firmware (the Manager's "Fix a problem"), red activity (its Home). */
+.chr-section { --tone: var(--pm-green); margin: 20px 5px 5px 0; padding: 0 12px 12px; }
+.chr-section[data-tone="cyan"] { --tone: var(--pm-cyan); }
+.chr-section[data-tone="orange"] { --tone: var(--pm-orange); }
+.chr-section[data-tone="red"] { --tone: var(--pm-red); }
+.chr-section > summary { cursor: pointer; list-style: none; margin: 0 -12px 12px; padding: 9px 80px 9px 12px; color: #000;
+  font-size: 12px; line-height: 1.4; text-transform: uppercase; background: var(--chr-dither) right top / 72px 40px repeat-y, var(--tone); }
+.chr-section > summary::-webkit-details-marker { display: none; }
+.chr-section > summary::before { content: '+ '; }
+.chr-section[open] > summary::before { content: '- '; }
+.chr-section select, .chr-confirm input { min-width: 0; }
+.chr-confirm { display: flex; gap: 8px; margin: 8px 0; }
+.chr-confirm input { flex: 1; min-width: 0; font-family: var(--pm-mono) !important; }
+.chr-warn { color: var(--pm-warn) !important; }
+.chr-short { max-height: 9rem; }
+.chr-activity { margin: 0; padding-left: 1.6rem; font-size: 12px; color: var(--pm-text-dim); max-height: 10rem; overflow: auto; }
+.chr-activity li.error { color: var(--pm-error); }
+body[data-preset="chromatic"] .chr-pairing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 5px 5px 0;
+  padding: 10px 12px; border-image: linear-gradient(var(--pm-amber-hi) 0 1px, var(--pm-amber) 1px) 3; }
+body[data-preset="chromatic"] .chr-pairing[hidden] { display: none; }
+body[data-preset="chromatic"] #chromatic-usb-offer { margin: 10px 5px 5px 0; }
+body[data-preset="chromatic"] .chr-code { font: 16px/1 var(--pm-head); letter-spacing: .18em; color: var(--pm-warn); }
+body[data-preset="chromatic"] .chr-pairing .micro { flex: 1 1 14rem; }
+.chr-panel a, .chr-stage a { color: var(--pm-link); overflow-wrap: anywhere; font-size: 12px; }
+body[data-preset="chromatic"] .capture-actions { gap: 10px; }
+
+/* ---- page layout: device view and tools share the width evenly at every size ---- */
+/* The shared session log lists generic device requests; the Chromatic logs its own activity in its
+   Activity card. Only the shared feedback line stays, and only once it has a message. */
+body[data-preset="chromatic"] .activity > .section-heading,
+body[data-preset="chromatic"] .activity > .feature-log-hint,
+body[data-preset="chromatic"] .activity > #tasks { display: none !important; }
+body[data-preset="chromatic"] .activity:has(> #feedback:empty) { display: none; }
+body[data-preset="chromatic"] .activity #feedback { margin: 0; }
+body[data-preset="chromatic"] main { max-width: 2400px; }
+body[data-preset="chromatic"] .workspace { gap: 20px; margin-top: 20px; grid-template-columns: minmax(0, 1fr); }
+body[data-preset="chromatic"] .workspace > * { min-width: 0; }
+@media (min-width: 951px) {
+  body[data-preset="chromatic"] .workspace { grid-template-columns: minmax(380px, 1fr) minmax(0, 1.5fr); }
+}
+/* Side by side, panel.js (balance) moves the smaller cards (logs, console, firmware, activity)
+   under the device view (.chr-more) until both columns end at about the same height. Stacked
+   (phone width) they stay at the end of the tools panel. */
+@media (min-width: 1500px) {
+  body[data-preset="chromatic"] .workspace { grid-template-columns: minmax(420px, 1fr) minmax(0, 1.6fr); }
+}
+@media (min-width: 2100px) {
+  body[data-preset="chromatic"] .chr-device { width: min(100%, 520px); }  /* ultrawide: a larger console */
+}
+@media (max-width: 520px) {
+  body[data-preset="chromatic"] .panel, body[data-preset="chromatic"] .connect-bar { padding: 16px 12px; }
+  body[data-preset="chromatic"] .chr-stage-heading,
+  body[data-preset="chromatic"] #chromatic-panel > .section-heading { margin: -10px -6px 16px; padding-right: 40px; flex-wrap: wrap; }
+  body[data-preset="chromatic"] button.connect-button:not([data-chr-button]) { min-width: 0; }
+  body[data-preset="chromatic"] h2 { font-size: 13px; }
+}
+/* "What works" groups flow into as many columns as fit (one on narrow windows). */
+body[data-preset="chromatic"] .chr-features { display: block; columns: 15rem 5; column-gap: 16px; }
+body[data-preset="chromatic"] .chr-features li { grid-template-columns: 1fr; }
+body[data-preset="chromatic"] .chr-features small,
+body[data-preset="chromatic"] .chr-badge { grid-column: 1; grid-row: auto; }
+body[data-preset="chromatic"] .chr-group { margin-bottom: 10px; }
+body[data-preset="chromatic"] .chr-group h4 { break-after: avoid; }
+body[data-preset="chromatic"] .chr-features li { break-inside: avoid; margin-bottom: 6px; }
+body[data-preset="chromatic"] .chr-group ul { display: block; }
+
+/* ---- tooltips (viewer.js #rp-tip): a small Chromatic Manager speech bubble, pixel font,
+        grey bevelled border with a light top line and a hard drop shadow; "Right now" in amber ---- */
+body[data-preset="chromatic"] .rp-tip {
+  max-width: min(300px, calc(100vw - 16px)); padding: 8px 10px 9px; background: var(--pm-window); color: var(--pm-text);
+  border: 3px solid transparent; border-image: linear-gradient(var(--pm-frame-light) 0 1px, var(--pm-frame-dim) 1px) 3;
+  border-radius: 0; box-shadow: 4px 4px 0 var(--pm-frame-shadow); font: 12px/1.55 var(--pm-body); letter-spacing: .02em;
+}
+body[data-preset="chromatic"] .rp-tip-now { margin-top: 6px; color: var(--pm-warn); }
+/* Hover/focus spots on the drawn edge controls (power, volume, ports): invisible until focused. */
+.chr-device .chr-side { position: absolute; cursor: help; }
+.chr-device .chr-side:focus-visible { outline: 2px dashed var(--pm-info); outline-offset: 1px; }
+/* The author credit: small pixel text at the very bottom. */
+body[data-preset="chromatic"] .rp-credit { margin-top: 24px; color: var(--pm-text-dim); font: 10px/1.4 var(--pm-body); letter-spacing: .08em;
+  text-transform: uppercase; opacity: 1; }
+body[data-preset="chromatic"] .rp-credit span:focus-visible { outline: 2px dashed var(--pm-info); outline-offset: 3px; }
+
+/* ---- private details: the Chromatic Manager's pixel eye button (chromatic_manager_gui FitButton
+        kind 'privacy': the grey bevel with the 11 x 9 eye drawn cell by cell in the outline colour) ---- */
+body[data-preset="chromatic"] .privacy-toggle:not([data-chr-button]) {
+  --ink: var(--pm-outline); width: 40px; height: 34px; min-height: 34px; padding: 0 !important; display: inline-grid; place-items: center;
+}
+body[data-preset="chromatic"] .privacy-toggle:not([data-chr-button]):active:not(:disabled) { padding: 1px 0 0 1px !important; }
+body[data-preset="chromatic"] .privacy-toggle .privacy-icon { width: 22px; height: 18px; image-rendering: pixelated; }
+
+/* ---- USB hand-off sign (chromatic/usb_hold.py): an amber pixel band while Chromatic Manager
+        holds the USB cable, green for a few seconds once it is back; the bevel of the Manager's
+        pixel buttons and the dithered fade of its title band ---- */
+body[data-preset="chromatic"] .chr-hold { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 14px;
+  padding: 9px 76px 9px 12px; color: #000; font-family: var(--pm-body); font-size: 12px; line-height: 1.45;
+  background: var(--chr-dither) right top / 72px 40px repeat-y, var(--pm-amber); border: 2px solid var(--pm-outline);
+  box-shadow: inset 2px 2px 0 var(--pm-amber-hi), inset -3px -3px 0 var(--pm-amber-shade), 4px 4px 0 var(--pm-frame-shadow); }
+body[data-preset="chromatic"] .chr-hold[hidden] { display: none; }
+body[data-preset="chromatic"] .chr-hold[data-state="back"] { background-color: var(--pm-go);
+  box-shadow: inset 2px 2px 0 var(--pm-go-hi), inset -3px -3px 0 var(--pm-go-shade), 4px 4px 0 var(--pm-frame-shadow); }
+body[data-preset="chromatic"] .chr-hold strong { font-family: var(--pm-head); font-size: 10px; text-transform: uppercase; }
+body[data-preset="chromatic"] .chr-hold span { flex: 1 1 16rem; }

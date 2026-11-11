@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms: ADDITIONAL-TERMS.md
+# The first three rows are the verified stock table, unchanged and in order.
+# The launcher sits in flash that is erased on this unit (0x255000 onward). The
+# 1.3 MiB of unreferenced data at 0x100000-0x255000 is left exactly as found.
+# No otadata: the boot choice is the reset reason, so there is nothing to corrupt.
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x6000
+phy_init, data, phy,     0xf000,   0x1000
+factory,  app,  factory, 0x10000,  0x100000
+launcher, app,  ota_0,   0x260000, 0x1a0000

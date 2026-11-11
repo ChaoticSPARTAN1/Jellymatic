@@ -1,0 +1,86 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Additional terms: ADDITIONAL-TERMS.md */
+/* Chromatic PC-tool theme (see chromatic_theme.py). @names come from its PALETTE. Buttons,
+   tabs, the frame, header band, speech bubble and console are painted in code; this sheet
+   only colours text, fields and dialogs. */
+
+QWidget {
+    color: @text;
+    background: transparent;
+}
+QWidget#Window {
+    background-color: transparent;
+}
+QDialog, QMessageBox {
+    background-color: @window;
+    border: 3px solid @frame_dim;
+}
+
+QLabel[role="dim"]    { color: @text_dim; }
+QLabel[role="ok"]     { color: @ok; }
+QLabel[role="update"], QLabel[role="warn"], QLabel[role="busy"] { color: @warn; }
+QLabel[role="error"]  { color: @error; }
+QLabel[role="info"]   { color: @text; }
+QLabel[role="value"]  { color: @text; }
+QLabel[role="notice"] { color: @warn; }
+
+QFrame#Details {
+    background-color: @window;
+    border: 2px solid @frame_shadow;
+}
+
+QCheckBox { color: @text; spacing: 6px; }
+QCheckBox::indicator {
+    width: 12px;
+    height: 12px;
+    border: 2px solid @frame_dim;
+    background-color: @window;
+}
+QCheckBox::indicator:checked {
+    background-color: @button_go;
+    border-color: @button_go_shade;
+}
+
+QLineEdit {
+    background-color: @window;
+    color: @text;
+    border: 2px solid @frame_dim;
+    padding: 4px 6px;
+}
+QLineEdit:focus { border-color: @button; }
+
+QPlainTextEdit#Log {
+    background-color: @window;
+    color: @text_dim;
+    border: 2px solid @frame_shadow;
+    selection-background-color: @frame_dim;
+}
+QScrollBar:vertical {
+    background: @window;
+    width: 10px;
+}
+QScrollBar::handle:vertical {
+    background: @frame_dim;
+    min-height: 24px;
+}
+QScrollBar::add-line, QScrollBar::sub-line { height: 0px; }
+QToolTip {
+    background-color: @window;
+    color: @text;
+    border: 2px solid @frame_dim;
+    padding: 4px;
+}
+
+/* The working banner: yellow notice while the console's screen is frozen, grey while it
+   restarts by itself. */
+QFrame#Banner {
+    background-color: @window;
+    border: 2px solid @warn;
+}
+QFrame#Banner[mode="restarting"] {
+    border-color: @frame_light;
+}
+QLabel[role="banner"] {
+    color: @warn;
+    background: transparent;
+}

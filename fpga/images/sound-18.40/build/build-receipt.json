@@ -1,0 +1,151 @@
+{
+ "built": "2026-11-08 15:42:41",
+ "tool": "Gowin V1.9.12.04 (gw_sh build.tcl via build_evt1_x2.bat), owner licence",
+ "source": "staging\\chromatic-fpga-media\\esp32t",
+ "sources_sha256": {
+  "src/rtl/BSP/chromatic_media.v": "775e0239016038e3d8ef82743a1697e585b9d99015dfebd6037a82a1636a212b",
+  "src/rtl/BSP/system_monitor.sv": "18bd9e3a1495b986dec6f6590885f7d6b94769f3ada5f1d1b0bb4fae933ae0f3",
+  "src/top.v": "c403803fcbf0bec8a16b991df1a84d0b0f8898de4962f6302f80f79d43f04fff",
+  "src/rtl/EMU/emu_system_top.v": "a2f3cf51dbd13af17ef755ad9241e71d66eab01725acd8c70899d894e31cfc51",
+  "src/rtl/EMU/cart.v": "dcf52f615318aed68d35a33d99784280dd62b672932b839b7aed3be739e1f00d",
+  "src/rtl/EMU/CORE/gb.v": "735d9b73015fd2940de6195feda8cd699a2087ee14fdd3669eed08bb28dc4358",
+  "src/board/evt1_x2/evt1_x2.sdc": "358cc8d2062da69767a7c2687a245fc18d126ab42719524ad1ae26a1e7822cce"
+ },
+ "outputs": {
+  "build/evt1_x2.fs": {
+   "sha256": "21d557ac1c32591e90b409f2834bf07e4b660333f5040c55653034ddcd2516e7",
+   "size": 7412530
+  },
+  "build/evt1_x2.bin": {
+   "sha256": "fd62dd1521fe3c5fd12978e79fc1297275a9a2551127ad1e32ce71e79da53cb1",
+   "size": 921979
+  }
+ },
+ "timing": {
+  "setup_violated_endpoints": 0,
+  "hold_violated_endpoints": 0
+ },
+ "sta": {
+  "setup_violated_endpoints": 0,
+  "hold_violated_endpoints": 0,
+  "paths_analyzed": 43230,
+  "endpoints_analyzed": 28016,
+  "report_created": "Sun Nov  8 15:42:42 2026"
+ },
+ "fmax": {
+  "sclk": {
+   "constraint_mhz": 40.0,
+   "actual_mhz": 79.969
+  },
+  "usbintsclk": {
+   "constraint_mhz": 125.0,
+   "actual_mhz": 203.198
+  },
+  "xclk2": {
+   "constraint_mhz": 134.219,
+   "actual_mhz": 367.31
+  },
+  "pclk": {
+   "constraint_mhz": 33.555,
+   "actual_mhz": 44.172
+  },
+  "gclk": {
+   "constraint_mhz": 8.389,
+   "actual_mhz": 88.048
+  },
+  "xclk": {
+   "constraint_mhz": 67.11,
+   "actual_mhz": 116.366
+  },
+  "hclk": {
+   "constraint_mhz": 16.777,
+   "actual_mhz": 22.725
+  },
+  "PHY_CLKOUT": {
+   "constraint_mhz": 60.0,
+   "actual_mhz": 80.608
+  }
+ },
+ "qspi_timing": [
+  {
+   "command": "report_timing -setup -from [get_ports {QSPI_MOSI QSPI_MISO QSPI_WP QSPI_HD}] -max_paths 24 -max_common_paths 24",
+   "paths_reported": 9,
+   "worst_slack_ns": 6.248,
+   "worst_path": {
+    "n": 1,
+    "slack_ns": 6.248,
+    "from": "QSPI_MOSI_ibuf/I",
+    "to": "u_mem_system_top/u_QSPI_Slave/qAddress_0_s0/D",
+    "launch": "sclk:[F]",
+    "latch": "sclk:[R]"
+   },
+   "all_positive": true
+  },
+  {
+   "command": "report_timing -setup -from_clock [get_clocks {sclk}] -to_clock [get_clocks {sclk}] -max_paths 24 -max_common_paths 24",
+   "paths_reported": 24,
+   "worst_slack_ns": 6.248,
+   "worst_path": {
+    "n": 1,
+    "slack_ns": 6.248,
+    "from": "QSPI_MOSI_ibuf/I",
+    "to": "u_mem_system_top/u_QSPI_Slave/qAddress_0_s0/D",
+    "launch": "sclk:[F]",
+    "latch": "sclk:[R]"
+   },
+   "all_positive": true
+  },
+  {
+   "command": "report_timing -hold -from [get_ports {QSPI_MOSI QSPI_MISO QSPI_WP QSPI_HD}] -max_paths 24 -max_common_paths 24",
+   "paths_reported": 9,
+   "worst_slack_ns": 11.131,
+   "worst_path": {
+    "n": 1,
+    "slack_ns": 11.131,
+    "from": "QSPI_HD_ibuf/I",
+    "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_3_s0/D",
+    "launch": "sclk:[F]",
+    "latch": "sclk:[R]"
+   },
+   "all_positive": true
+  },
+  {
+   "command": "report_timing -hold -from_clock [get_clocks {sclk}] -to_clock [get_clocks {sclk}] -max_paths 24 -max_common_paths 24",
+   "paths_reported": 24,
+   "worst_slack_ns": 0.247,
+   "worst_path": {
+    "n": 1,
+    "slack_ns": 0.247,
+    "from": "u_mem_system_top/u_QSPI_Slave/QSPI_VALID_phase_s1/Q",
+    "to": "u_mem_system_top/u_QSPI_Slave/QSPI_VALID_phase_s1/D",
+    "launch": "sclk:[R]",
+    "latch": "sclk:[R]"
+   },
+   "all_positive": true
+  }
+ ],
+ "qspi_paths_all_positive": true,
+ "resources": {
+  "Logic": "16421/23040",
+  "Register": "8635/23595",
+  "CLS": "10175/11520",
+  "BSRAM": "44/56",
+  "DSP": "11.5/28"
+ },
+ "installed": false,
+ "note": "Never written to a console by this script. Owner-present session only: Try FPGA image (temporary, SRAM) first, docs/CHROMATIC-AUDIO-PLAN.md.",
+ "stage_receipt_sha256": "8f83a491bbd152fafbf0658fe8e84022cad231e801814757a2de20735677a0bb",
+ "version_register": {
+  "major": 18,
+  "minor": 40,
+  "debug": 1
+ },
+ "game_hold": "gb.v cpu_hold (CPU clock-enable stall with no access in flight); speedcontrol pause is stock, the core's LCD timing never stops",
+ "stock_reference": {
+  "Logic": "16234/23040",
+  "Register": "8525/23595",
+  "CLS": "10131/11520",
+  "BSRAM": "44/56",
+  "DSP": "11.5/28"
+ }
+}

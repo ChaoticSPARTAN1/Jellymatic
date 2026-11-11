@@ -1,0 +1,43 @@
+{
+  "id": "chromatic",
+  "order": 20,
+  "name": "ModRetro Chromatic",
+  "transport": "python-v1",
+  "status": "simulator-only",
+  "mark": "C",
+  "models": [
+    "chromatic"
+  ],
+  "capabilities": [
+    "chromatic"
+  ],
+  "display": {
+    "layout": "single-screen",
+    "width": 160,
+    "height": 144
+  },
+  "buttons": [
+    "UP",
+    "DOWN",
+    "LEFT",
+    "RIGHT",
+    "A",
+    "B",
+    "START",
+    "SELECT",
+    "MENU"
+  ],
+  "styleSheet": "/presets/chromatic/theme.css",
+  "panelScript": "/presets/chromatic/panel.js",
+  "theme": {
+    "background": "#000000",
+    "surface": "#1e1e1e",
+    "surface2": "#000000",
+    "line": "#666666",
+    "text": "#ffffff",
+    "muted": "#999999",
+    "accent": "#ff0000",
+    "accent2": "#ffcc00",
+    "glow": "#00a2ff"
+  }
+}

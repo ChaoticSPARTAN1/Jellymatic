@@ -1,0 +1,8 @@
+# Text files are stored and checked out with LF line endings on every system.
+* text=auto eol=lf
+# Windows command scripts keep CRLF so cmd.exe reads them correctly.
+*.cmd text eol=crlf
+# Binary files are never converted.
+*.png binary
+*.ttf binary
+*.bmp binary

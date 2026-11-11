@@ -1,0 +1,148 @@
+{
+ "upstream_commit": "a01aa375147943cbcd4a41f41585220d55e0c28a",
+ "upstream_tag": "v18.14",
+ "gameboy_mister": "staging/chromatic-fpga-stock (submodule 44f43d5797cf)",
+ "chromatic_media_v_sha256": "775e0239016038e3d8ef82743a1697e585b9d99015dfebd6037a82a1636a212b",
+ "version_register": {
+  "major": 18,
+  "minor": 40,
+  "debug": 1
+ },
+ "game_hold": "gb.v cpu_hold (CPU clock-enable stall with no access in flight); speedcontrol pause is stock, the core's LCD timing never stops",
+ "qspi_timing": "evt1_x2.sdc: set_input_delay -clock_fall max 5 / min -2 on QSPI data, QSPI_CS false path, report_timing for the QSPI paths",
+ "patches": [
+  {
+   "file": "src/top.v",
+   "anchor": "wire [15:0] left, right;",
+   "before": "bbe60fa840de80fec3a8969b2e2c73c2a0d9b9b5541b9cbda13dc001fa097061",
+   "after": "641800cc9d48294f2e4a5cd5e109f71b343e246f4a69c17331c10ebff522dccf"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".reset_n(lock_o),",
+   "before": "641800cc9d48294f2e4a5cd5e109f71b343e246f4a69c17331c10ebff522dccf",
+   "after": "6a779efb000f34b7c2700af24815a52f8fecba3bc72642c4b6faaba26193b97c"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": "wire menu_gated = qMenuInit&(CART_DET_sr[6:3]==4'b1111) ? BTN_MENU_filtered : 1'b1;",
+   "before": "6a779efb000f34b7c2700af24815a52f8fecba3bc72642c4b6faaba26193b97c",
+   "after": "0eab4df2b00e2010d0289c3202b80ff13bb2e2d490acbfd7a99e96d5e0865541"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".VERSION_DET (VERSION_DET),",
+   "before": "0eab4df2b00e2010d0289c3202b80ff13bb2e2d490acbfd7a99e96d5e0865541",
+   "after": "3fddff73795ff26f35234071f98600d79dd5dc2c5835db3bd38a7545fe6f0b54"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".MENU_CLOSED(menuDisabled),",
+   "before": "3fddff73795ff26f35234071f98600d79dd5dc2c5835db3bd38a7545fe6f0b54",
+   "after": "c403803fcbf0bec8a16b991df1a84d0b0f8898de4962f6302f80f79d43f04fff"
+  },
+  {
+   "file": "src/rtl/EMU/CORE/gb.v",
+   "anchor": "output speed,   //GBC",
+   "before": "2afb171e90683eec50aca6234a8810e0c4798d4347221c9b27a963245e42aac2",
+   "after": "af8772eee4eb92484e0c231d31b2cf4e84945a7550bee61209e1efd2d3ddbd74"
+  },
+  {
+   "file": "src/rtl/EMU/CORE/gb.v",
+   "anchor": "wire cpu_clken = ~hdma_cpu_stop & ce_cpu;",
+   "before": "af8772eee4eb92484e0c231d31b2cf4e84945a7550bee61209e1efd2d3ddbd74",
+   "after": "9dacac0551c4f007cd77062f40cf403449432203273a4806cb9bb50a49bc9a3d"
+  },
+  {
+   "file": "src/rtl/EMU/CORE/gb.v",
+   "anchor": "wire WRITE_CYCLE;",
+   "before": "9dacac0551c4f007cd77062f40cf403449432203273a4806cb9bb50a49bc9a3d",
+   "after": "735d9b73015fd2940de6195feda8cd699a2087ee14fdd3669eed08bb28dc4358"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "input               MENU_CLOSED,",
+   "before": "ca8391b7efb897cdb38789d58e3503350633b15cdad65e58873592df7c576aa3",
+   "after": "90b1ad5830f2b7262625ff01999bc5efd480e53da358546470512f3355c4e17e"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "wire hdma_active;",
+   "before": "90b1ad5830f2b7262625ff01999bc5efd480e53da358546470512f3355c4e17e",
+   "after": "33092f3e75f82d0011afb9268cc02055669c0a0cfebf3d43f0c1d83a236abc06"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": ".speed(cpu_speed),   //GBC",
+   "before": "33092f3e75f82d0011afb9268cc02055669c0a0cfebf3d43f0c1d83a236abc06",
+   "after": "a2f3cf51dbd13af17ef755ad9241e71d66eab01725acd8c70899d894e31cfc51"
+  },
+  {
+   "file": "src/rtl/EMU/cart.v",
+   "anchor": "input               rd,",
+   "before": "8a8ea8827fdbf4b9cf3b237ff7fabdf2331a0e3cf9649fb056c599dc159531c8",
+   "after": "dd6a38866b9729414d7d2da6e582c3e6826f5f244b5508822a0f5f762ef2905d"
+  },
+  {
+   "file": "src/rtl/EMU/cart.v",
+   "anchor": "endcase",
+   "before": "dd6a38866b9729414d7d2da6e582c3e6826f5f244b5508822a0f5f762ef2905d",
+   "after": "dcf52f615318aed68d35a33d99784280dd62b672932b839b7aed3be739e1f00d"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "input               VERSION_DET,",
+   "before": "8151181826671d0cb9064b187b4476f98d192d2f8daf3bc74e288531167fdc78",
+   "after": "18f949f324139550a6d3c60d9fdbfa38c40b0d694e3a753355d62fd2a77c65d4"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "reg [13:0] version = {",
+   "before": "18f949f324139550a6d3c60d9fdbfa38c40b0d694e3a753355d62fd2a77c65d4",
+   "after": "d2d0c3859e6a8eaef93d00a51a5d89a609fda8d41585a98315d0be3ce4e40261"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": ".rx_address(rx_address),",
+   "before": "d2d0c3859e6a8eaef93d00a51a5d89a609fda8d41585a98315d0be3ce4e40261",
+   "after": "e56e3ff1ae0a314af2165d96b810f723aefe4b156447d146fa5d2623c641a965"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "reg menuDown = 1'b0;",
+   "before": "e56e3ff1ae0a314af2165d96b810f723aefe4b156447d146fa5d2623c641a965",
+   "after": "32230bd20a2d370275104caa381e05bb907b95e356f3153c3732a333e1170731"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "if(btnMenu_sr[15:0] == 16'h8000) begin",
+   "before": "32230bd20a2d370275104caa381e05bb907b95e356f3153c3732a333e1170731",
+   "after": "18bd9e3a1495b986dec6f6590885f7d6b94769f3ada5f1d1b0bb4fae933ae0f3"
+  },
+  {
+   "file": "src/board/evt1_x2/evt1_x2.sdc",
+   "anchor": "set_max_delay -from [get_clocks {hclk}] -to [get_ports {CART_D[*]}] 14",
+   "before": "f1145a4c83fe8767972a7dba31bb117057dfa06884d43eeba4ab5b252c9acbfb",
+   "after": "358cc8d2062da69767a7c2687a245fc18d126ab42719524ad1ae26a1e7822cce"
+  },
+  {
+   "file": "evt1_x2.gprj",
+   "anchor": "<File path=\"src/rtl/BSP/aud_system_top_8_16.sv\" type=\"file.verilog\" enable=\"1\"/>",
+   "before": "80958fd3235b3b886cc04f0c14d7510344ad9dcc5f7083d6bf2a3ad58fb4a469",
+   "after": "46c9613d4b79658a2d1dfb26025d3af595895c3f6eebd1c553ca89682160c943"
+  },
+  {
+   "file": "build_options.tcl",
+   "anchor": "set value [ide_option $key]",
+   "before": "9071c0d091437bb18a8f1ca09a4db4b709a600ce55ff9b05207a43d9f00b78f3",
+   "after": "164341eef7bd44fbc4a1afeb061a0410b5765076383669ef5a2c3ab0f54f8fd0"
+  }
+ ],
+ "process_options_unchanged": [
+  "JTAG false",
+  "RECONFIG_N false",
+  "Multi_Boot false"
+ ],
+ "built": false,
+ "device": "GW5A-EV25UG256CC1/I0 (set_device in build.tcl, unchanged)"
+}

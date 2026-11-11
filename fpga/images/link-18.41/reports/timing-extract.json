@@ -1,0 +1,371 @@
+{
+ "from": "reports/evt1_x2.tr (Gowin timing report of this build), read by scripts/stage_chromatic_fpga_link.py",
+ "sta": {
+  "setup_violated_endpoints": 0,
+  "hold_violated_endpoints": 0,
+  "paths_analyzed": 48278,
+  "endpoints_analyzed": 31427,
+  "report_created": "Mon Nov  9 18:51:44 2026"
+ },
+ "slack_floor_ns": 1.0,
+ "setup_paths_reported": 53,
+ "worst_reported_setup": {
+  "n": 1,
+  "slack_ns": 1.447,
+  "from": "u_emu_system_top/u_cart/CART_DIN_r1_6_s0/Q",
+  "to": "u_emu_system_top/u_cart/CART_RD_s0/D",
+  "launch": "pclk:[F]",
+  "latch": "hclk:[R]"
+ },
+ "worst_reported_hold": {
+  "n": 1,
+  "slack_ns": 0.174,
+  "from": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/oe_dq_n_s2/Q",
+  "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/gdq[0].oser4_dq/TX0",
+  "launch": "xclk:[R]",
+  "latch": "xclk:[R]"
+ },
+ "worst_reported_recovery": {
+  "n": 1,
+  "slack_ns": 0.688,
+  "from": "memrst_s0/Q",
+  "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/gdq[5].oser4_dq/RESET",
+  "launch": "xclk2:[R]",
+  "latch": "xclk2:[F]"
+ },
+ "worst_reported_removal": {
+  "n": 1,
+  "slack_ns": 0.266,
+  "from": "cartridge_reset_sync_1_s0/Q",
+  "to": "u_cartridge_interface/state_0_s0/CLEAR",
+  "launch": "hclk:[R]",
+  "latch": "hclk:[R]"
+ },
+ "setup_paths_by_slack": [
+  {
+   "slack_ns": 1.447,
+   "from": "u_emu_system_top/u_cart/CART_DIN_r1_6_s0/Q",
+   "to": "u_emu_system_top/u_cart/CART_RD_s0/D",
+   "launch": "pclk:[F]",
+   "latch": "hclk:[R]"
+  },
+  {
+   "slack_ns": 1.482,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_23_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.557,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_42_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.56,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_43_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.592,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_39_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.722,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_27_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.722,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_36_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.781,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_20_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.808,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_17_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.819,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_55_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.866,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_30_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.9,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_45_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.904,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_32_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.914,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_35_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.917,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_38_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.917,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_46_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.94,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_44_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.948,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_21_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.948,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_28_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 1.948,
+   "from": "memrst_s0/Q",
+   "to": "u_mem_system_top/iMultiPortRamCtrl/iPsramController/dq_shiftreg_29_s0/D",
+   "launch": "xclk2:[R]",
+   "latch": "xclk:[R]"
+  },
+  {
+   "slack_ns": 6.442,
+   "from": "QSPI_MOSI_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_0_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.442,
+   "from": "QSPI_MOSI_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_0_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.478,
+   "from": "QSPI_MOSI_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_0_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.478,
+   "from": "QSPI_MOSI_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_0_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.597,
+   "from": "QSPI_MISO_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_1_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.597,
+   "from": "QSPI_MISO_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_1_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.604,
+   "from": "QSPI_MISO_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_1_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.604,
+   "from": "QSPI_MISO_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_1_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.625,
+   "from": "QSPI_WP_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_2_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.625,
+   "from": "QSPI_WP_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_2_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.626,
+   "from": "QSPI_HD_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_3_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.626,
+   "from": "QSPI_HD_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_3_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.682,
+   "from": "QSPI_HD_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_3_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.682,
+   "from": "QSPI_HD_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qPins_r1_3_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.723,
+   "from": "QSPI_MOSI_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qAddress_0_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.723,
+   "from": "QSPI_MOSI_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qAddress_0_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.728,
+   "from": "QSPI_WP_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_2_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 6.728,
+   "from": "QSPI_WP_ibuf/I",
+   "to": "u_mem_system_top/u_QSPI_Slave/qDataByte_2_s0/D",
+   "launch": "sclk:[F]",
+   "latch": "sclk:[R]"
+  },
+  {
+   "slack_ns": 8.426,
+   "from": "u_mem_system_top/u_QSPI_Slave/qValid_s0/Q",
+   "to": "u_mem_system_top/u_mm_burst_write/u_fifo1k/fifo_inst/Full_s0/D",
+   "launch": "sclk:[R]",
+   "latch": "sclk:[F]"
+  },
+  {
+   "slack_ns": 8.485,
+   "from": "u_mem_system_top/u_QSPI_Slave/qValid_s0/Q",
+   "to": "u_mem_system_top/u_mm_burst_write/u_fifo1k/fifo_inst/Full_s0/D",
+   "launch": "sclk:[R]",
+   "latch": "sclk:[F]"
+  }
+ ],
+ "fmax": {
+  "sclk": {
+   "constraint_mhz": 40.0,
+   "actual_mhz": 82.542
+  },
+  "usbintsclk": {
+   "constraint_mhz": 125.0,
+   "actual_mhz": 193.447
+  },
+  "xclk2": {
+   "constraint_mhz": 134.219,
+   "actual_mhz": 420.378
+  },
+  "pclk": {
+   "constraint_mhz": 33.555,
+   "actual_mhz": 39.108
+  },
+  "gclk": {
+   "constraint_mhz": 8.389,
+   "actual_mhz": 90.419
+  },
+  "xclk": {
+   "constraint_mhz": 67.11,
+   "actual_mhz": 117.33
+  },
+  "hclk": {
+   "constraint_mhz": 16.777,
+   "actual_mhz": 21.414
+  },
+  "PHY_CLKOUT": {
+   "constraint_mhz": 60.0,
+   "actual_mhz": 77.788
+  }
+ },
+ "resources": {
+  "Logic": "17668/23040",
+  "Register": "9748/23595",
+  "CLS": "10502/11520",
+  "BSRAM": "46/56",
+  "DSP": "11.5/28"
+ },
+ "process_options": {
+  "Replicate_Resources": "true",
+  "Route_Maxfan": "10"
+ }
+}

@@ -1,0 +1,15 @@
+Fonts used by Remote Pilot's Chromatic preset (presets/chromatic/theme.css), served locally by
+receiver.py at /fonts/<file> and loaded with @font-face. No CDN is used.
+
+- heading-PressStart2P-Regular.ttf: Press Start 2P by CodeMan38. SIL Open Font License 1.1,
+  licence text in OFL-PressStart2P.txt.
+- body-Silkscreen-Regular.ttf: Silkscreen by The Silkscreen Project Authors. SIL Open Font
+  License 1.1, licence text in OFL-Silkscreen.txt.
+
+Both files are unmodified copies of the ones in the Chromatic Manager project
+(Jellymatic's scripts/chromatic_gui_fonts/; see README.txt here for their
+origin); only the file names carry the heading-/body- prefixes. Same SHA-256 as those copies,
+checked 2026-11-08:
+  body-Silkscreen-Regular.ttf       c845473330b94c2079ce9af01c51ac8ba2d99c24f4d14c039843bbb8e642ebd8
+  heading-PressStart2P-Regular.ttf  034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d
+The OFL allows bundling and redistribution with software; keep the licence texts with the fonts.

@@ -1,0 +1,34 @@
+Chromatic Manager: third-party notices
+=====================================
+
+Chromatic Manager is part of Jellymatic (GPL-3.0-or-later, with the attribution term in
+ADDITIONAL-TERMS.md; created by ChaoticSPARTAN1). Jellymatic is an independent project, not affiliated
+with ModRetro or the Jellyfin project, and not made, endorsed or supported by ModRetro.
+
+The window's colours, sizes and screen order are our own choices modelled on the look of ModRetro's
+Chromatic tools (values cited in scripts/chromatic_theme.py). No ModRetro image, logo, font, icon, text or
+code is included. The console picture and icons are drawn in code by this project.
+
+When run from source, Chromatic Manager uses these packages, installed by you from PyPI
+(requirements.txt), each under its own licence:
+
+  PySide6-Essentials 6.12.0 and shiboken6 (Qt for Python) with the Qt 6 libraries:
+    GNU LGPL v3.0 (lgpl-3.0.txt, together with gpl-3.0.txt). (c) The Qt Company Ltd. and contributors.
+    Qt's own third-party attributions: https://doc.qt.io/qt-6/licenses-used-in-qt.html
+    Source: https://download.qt.io/official_releases/QtForPython/
+  esptool 4.12.0: GNU GPL v2 or later (gpl-2.0.txt). Source: https://github.com/espressif/esptool
+  pyserial 3.5: BSD-3-Clause (pyserial-LICENSE.txt).
+
+If you build the portable program yourself (scripts/Build-ChromaticManagerApp.ps1), PyInstaller (GPL v2
+or later with its bootloader exception), Python (PSF licence) and the packages' dependencies are bundled
+too; the build copies their licence files into licenses\. If you share such a build, you must keep the Qt
+libraries replaceable and provide these notices and the corresponding source offers.
+
+Fonts (SIL Open Font License 1.1): Press Start 2P (CodeMan38) and Silkscreen (The Silkscreen Project
+Authors), unmodified; see ..\chromatic_gui_fonts\.
+
+Jellyfin logo (scaled pixel version): CC BY-SA 4.0, the Jellyfin contributors (JELLYFIN-LOGO.txt).
+
+Trademarks: ModRetro and Chromatic are trademarks of ModRetro, Inc.; Jellyfin is a trademark of its
+owners; Qt is a trademark of The Qt Company Ltd.; Python is a trademark of the Python Software Foundation.
+They are used only to say what this tool works with.

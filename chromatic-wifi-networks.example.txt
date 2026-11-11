@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Optional. Copy this file to %LOCALAPPDATA%\Jellymatic\chromatic-wifi-networks.txt and fill it in
+# on your own PC. Chromatic Manager's Wi-Fi setup reads it and writes the networks to the console.
+# Never commit or share the filled-in file. At most 4 networks are kept on the console (2.4 GHz).
+ssid=Example Home Network
+password=example-password
+ssid=Example Phone Hotspot
+password=another-example

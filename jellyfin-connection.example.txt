@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Optional: this PC's Jellyfin settings, used by Chromatic Manager to give the console its OWN sign-in
+# through Quick Connect (your password never goes to the console). Easier: enter them in the Manager's
+# Settings tab, which writes this file for you.
+# To write it by hand, copy this file to %LOCALAPPDATA%\Jellymatic\jellyfin-connection.txt and fill it in.
+# Values are literal text after '='. Do not quote them or add inline comments. Never commit or share it.
+server_url=http://your-server:8096
+username=YOUR_USERNAME
+password=YOUR_PASSWORD
+# Alternatively remove username/password and set access_token=YOUR_TOKEN

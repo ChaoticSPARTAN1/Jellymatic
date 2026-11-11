@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.ttf binary
+*.ico binary
+
+# Hash-pinned sources and receipts: byte for byte as committed (no line-ending conversion). Their SHA-256
+# values are recorded in fpga/images/*/build/build-receipt.json and scripts/chromatic_fpga.py.
+fpga/images/** -text
+chromatic/fpga-media/chromatic_media.v -text
+rtl/chromatic_pocket_link.v -text
+rtl/byte_fifo.v -text
+rtl/gb_link_byte.v -text
+rtl/gb_link_stream.v -text
+rtl/link_mode_guard.v -text

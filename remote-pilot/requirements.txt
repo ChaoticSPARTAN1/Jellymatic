@@ -1,0 +1,3 @@
+# Remote Pilot needs only the Python standard library, plus this optional package for the USB link.
+# Installed by Setup-RemotePilot.ps1 into the private local\venv folder.
+pyserial==3.5                # USB serial (BSD-3-Clause)

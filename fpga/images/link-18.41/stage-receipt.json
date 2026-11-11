@@ -1,0 +1,300 @@
+{
+ "what": "stock 18.14 + Chromatic sound hooks + Pocket link bridge (combined image)",
+ "upstream_commit": "a01aa375147943cbcd4a41f41585220d55e0c28a",
+ "upstream_tag": "v18.14",
+ "gameboy_mister": "staging/chromatic-fpga-stock (submodule 44f43d5797cf)",
+ "chromatic_media_v_sha256": "775e0239016038e3d8ef82743a1697e585b9d99015dfebd6037a82a1636a212b",
+ "version_register": {
+  "major": 18,
+  "minor": 41,
+  "debug": 1
+ },
+ "version_source": "chromatic/launcher/shared/launcher_logic.h PJ_FPGA_LINK_MINOR",
+ "game_hold": "gb.v cpu_hold (CPU clock-enable stall with no access in flight); speedcontrol pause is stock, the core's LCD timing never stops",
+ "qspi_timing": "evt1_x2.sdc: set_input_delay -clock_fall max 5 / min -2 on QSPI data, QSPI_CS false path, report_timing for the QSPI paths",
+ "link_timing": "evt1_x2.sdc: set_false_path -from [get_ports {LINK_IN LINK_CLK}] (asynchronous inputs, synchronised on hclk by the stock game path and on gClk by gb_link_byte)",
+ "patches": [
+  {
+   "file": "src/top.v",
+   "anchor": "wire [15:0] left, right;",
+   "before": "bbe60fa840de80fec3a8969b2e2c73c2a0d9b9b5541b9cbda13dc001fa097061",
+   "after": "641800cc9d48294f2e4a5cd5e109f71b343e246f4a69c17331c10ebff522dccf"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".reset_n(lock_o),",
+   "before": "641800cc9d48294f2e4a5cd5e109f71b343e246f4a69c17331c10ebff522dccf",
+   "after": "6a779efb000f34b7c2700af24815a52f8fecba3bc72642c4b6faaba26193b97c"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": "wire menu_gated = qMenuInit&(CART_DET_sr[6:3]==4'b1111) ? BTN_MENU_filtered : 1'b1;",
+   "before": "6a779efb000f34b7c2700af24815a52f8fecba3bc72642c4b6faaba26193b97c",
+   "after": "0eab4df2b00e2010d0289c3202b80ff13bb2e2d490acbfd7a99e96d5e0865541"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".VERSION_DET (VERSION_DET),",
+   "before": "0eab4df2b00e2010d0289c3202b80ff13bb2e2d490acbfd7a99e96d5e0865541",
+   "after": "3fddff73795ff26f35234071f98600d79dd5dc2c5835db3bd38a7545fe6f0b54"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".MENU_CLOSED(menuDisabled),",
+   "before": "3fddff73795ff26f35234071f98600d79dd5dc2c5835db3bd38a7545fe6f0b54",
+   "after": "c403803fcbf0bec8a16b991df1a84d0b0f8898de4962f6302f80f79d43f04fff"
+  },
+  {
+   "file": "src/rtl/EMU/CORE/gb.v",
+   "anchor": "output speed,   //GBC",
+   "before": "2afb171e90683eec50aca6234a8810e0c4798d4347221c9b27a963245e42aac2",
+   "after": "af8772eee4eb92484e0c231d31b2cf4e84945a7550bee61209e1efd2d3ddbd74"
+  },
+  {
+   "file": "src/rtl/EMU/CORE/gb.v",
+   "anchor": "wire cpu_clken = ~hdma_cpu_stop & ce_cpu;",
+   "before": "af8772eee4eb92484e0c231d31b2cf4e84945a7550bee61209e1efd2d3ddbd74",
+   "after": "9dacac0551c4f007cd77062f40cf403449432203273a4806cb9bb50a49bc9a3d"
+  },
+  {
+   "file": "src/rtl/EMU/CORE/gb.v",
+   "anchor": "wire WRITE_CYCLE;",
+   "before": "9dacac0551c4f007cd77062f40cf403449432203273a4806cb9bb50a49bc9a3d",
+   "after": "735d9b73015fd2940de6195feda8cd699a2087ee14fdd3669eed08bb28dc4358"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "input               MENU_CLOSED,",
+   "before": "ca8391b7efb897cdb38789d58e3503350633b15cdad65e58873592df7c576aa3",
+   "after": "90b1ad5830f2b7262625ff01999bc5efd480e53da358546470512f3355c4e17e"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "wire hdma_active;",
+   "before": "90b1ad5830f2b7262625ff01999bc5efd480e53da358546470512f3355c4e17e",
+   "after": "33092f3e75f82d0011afb9268cc02055669c0a0cfebf3d43f0c1d83a236abc06"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": ".speed(cpu_speed),   //GBC",
+   "before": "33092f3e75f82d0011afb9268cc02055669c0a0cfebf3d43f0c1d83a236abc06",
+   "after": "a2f3cf51dbd13af17ef755ad9241e71d66eab01725acd8c70899d894e31cfc51"
+  },
+  {
+   "file": "src/rtl/EMU/cart.v",
+   "anchor": "input               rd,",
+   "before": "8a8ea8827fdbf4b9cf3b237ff7fabdf2331a0e3cf9649fb056c599dc159531c8",
+   "after": "dd6a38866b9729414d7d2da6e582c3e6826f5f244b5508822a0f5f762ef2905d"
+  },
+  {
+   "file": "src/rtl/EMU/cart.v",
+   "anchor": "endcase",
+   "before": "dd6a38866b9729414d7d2da6e582c3e6826f5f244b5508822a0f5f762ef2905d",
+   "after": "dcf52f615318aed68d35a33d99784280dd62b672932b839b7aed3be739e1f00d"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "input               VERSION_DET,",
+   "before": "8151181826671d0cb9064b187b4476f98d192d2f8daf3bc74e288531167fdc78",
+   "after": "18f949f324139550a6d3c60d9fdbfa38c40b0d694e3a753355d62fd2a77c65d4"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "reg [13:0] version = {",
+   "before": "18f949f324139550a6d3c60d9fdbfa38c40b0d694e3a753355d62fd2a77c65d4",
+   "after": "abc0fcb1ade362eaea40f80cfc5d3768c9de349aaf6830be7f24a8442c459444"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": ".rx_address(rx_address),",
+   "before": "abc0fcb1ade362eaea40f80cfc5d3768c9de349aaf6830be7f24a8442c459444",
+   "after": "4f95e9e267de27489fcdf71d4c7a110e3de25ac359350afae5b624058102a120"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "reg menuDown = 1'b0;",
+   "before": "4f95e9e267de27489fcdf71d4c7a110e3de25ac359350afae5b624058102a120",
+   "after": "db8d7e8741875eda80342457b7d89c6ca28799f221fbba3bcba380f9c49c5f52"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "if(btnMenu_sr[15:0] == 16'h8000) begin",
+   "before": "db8d7e8741875eda80342457b7d89c6ca28799f221fbba3bcba380f9c49c5f52",
+   "after": "5ca613e01278995c12d72225b34b7b7d0e3ad702b91ea7df512fd16ec7614b49"
+  },
+  {
+   "file": "src/board/evt1_x2/evt1_x2.sdc",
+   "anchor": "set_max_delay -from [get_clocks {hclk}] -to [get_ports {CART_D[*]}] 14",
+   "before": "f1145a4c83fe8767972a7dba31bb117057dfa06884d43eeba4ab5b252c9acbfb",
+   "after": "358cc8d2062da69767a7c2687a245fc18d126ab42719524ad1ae26a1e7822cce"
+  },
+  {
+   "file": "evt1_x2.gprj",
+   "anchor": "<File path=\"src/rtl/BSP/aud_system_top_8_16.sv\" type=\"file.verilog\" enable=\"1\"/>",
+   "before": "80958fd3235b3b886cc04f0c14d7510344ad9dcc5f7083d6bf2a3ad58fb4a469",
+   "after": "46c9613d4b79658a2d1dfb26025d3af595895c3f6eebd1c553ca89682160c943"
+  },
+  {
+   "file": "build_options.tcl",
+   "anchor": "set value [ide_option $key]",
+   "before": "9071c0d091437bb18a8f1ca09a4db4b709a600ce55ff9b05207a43d9f00b78f3",
+   "after": "164341eef7bd44fbc4a1afeb061a0410b5765076383669ef5a2c3ab0f54f8fd0"
+  }
+ ],
+ "link_hooks": [
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "output              media_menu   // bit 2: Menu button to the MCU; top.v holds the game CPU",
+   "before": "5ca613e01278995c12d72225b34b7b7d0e3ad702b91ea7df512fd16ec7614b49",
+   "after": "eedd27040c8b0e05f3ceced52250d3d5a9333b244c3d2ca484e0d474089a335f"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "localparam NUM_CH = 10;",
+   "before": "eedd27040c8b0e05f3ceced52250d3d5a9333b244c3d2ca484e0d474089a335f",
+   "after": "31c9283da612d066e78cbb70807d097218c07cd3a057bb6074ff2ce01d410b8a"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "wire [NUM_CH-1:0] channelsNewDataValid =",
+   "before": "31c9283da612d066e78cbb70807d097218c07cd3a057bb6074ff2ce01d410b8a",
+   "after": "718198e2027097459aed301497c5d1acc125155b5f90d5919c6eb42f655fb980"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "(tx_channel == 9) ? 8'd8 : // BG Palette Data",
+   "before": "718198e2027097459aed301497c5d1acc125155b5f90d5919c6eb42f655fb980",
+   "after": "59676ed695aea7d36e349927580981cb005572e8e52c7203678a6eda7f936fd1"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "default:         tx_senddata = 8'd0;",
+   "before": "59676ed695aea7d36e349927580981cb005572e8e52c7203678a6eda7f936fd1",
+   "after": "19b29e9f068612bbd97b2e381016540b6bf5f3ba03f8038fa18c6329f64b0971"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": ".channelsNewDataValid(channelsNewDataValid),",
+   "before": "19b29e9f068612bbd97b2e381016540b6bf5f3ba03f8038fa18c6329f64b0971",
+   "after": "816c0e7e1fc17b1524e7aedceba0c057baec57c6515bb60c10793117a73ff615"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "uart_packet_wrapper_tx u_uart_packet_wrapper_tx",
+   "before": "816c0e7e1fc17b1524e7aedceba0c057baec57c6515bb60c10793117a73ff615",
+   "after": "caaa1ab2511bfd45ad0a4e5891fea70215ac2b6bdcadf345855d24907d6c1ab5"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": "wire uartDisabled;",
+   "before": "caaa1ab2511bfd45ad0a4e5891fea70215ac2b6bdcadf345855d24907d6c1ab5",
+   "after": "41202ec412375f783ebe19802d6f81f6e586cadecbbca1ff43d8706bfdcc134d"
+  },
+  {
+   "file": "src/rtl/BSP/system_monitor.sv",
+   "anchor": ".media_menu(media_menu)",
+   "before": "41202ec412375f783ebe19802d6f81f6e586cadecbbca1ff43d8706bfdcc134d",
+   "after": "8c322d7d66c39f912259b0ba001ed4d8b1ff759c8bd921deb4131581a6ea3c39"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "inout               LINK_CLK,",
+   "before": "a2f3cf51dbd13af17ef755ad9241e71d66eab01725acd8c70899d894e31cfc51",
+   "after": "7fbc3f97bdd6e8fd6a00f5c39935ed6cf1c357238921e21cf09b2c584389d6f7"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "assign LINK_CLK_DIR_LV = sc_int_clock2_r1;",
+   "before": "7fbc3f97bdd6e8fd6a00f5c39935ed6cf1c357238921e21cf09b2c584389d6f7",
+   "after": "8284d50a92abc8f900f7d78f487c0119ffa91f88295200c577bfcf119569ac14"
+  },
+  {
+   "file": "src/rtl/EMU/emu_system_top.v",
+   "anchor": "assign LINK_OUT = serial_data_out_r1;",
+   "before": "8284d50a92abc8f900f7d78f487c0119ffa91f88295200c577bfcf119569ac14",
+   "after": "3534f3b3a5427c8f1c7cc4e53290a162eecb88287e185ffac288371781352678"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": "emu_system_top u_emu_system_top(",
+   "before": "c403803fcbf0bec8a16b991df1a84d0b0f8898de4962f6302f80f79d43f04fff",
+   "after": "5c56f0c92d927205dd7ec0423640c165351a47dee4a01f085ae152a30a75fe22"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".LINK_CLK(LINK_CLK),",
+   "before": "5c56f0c92d927205dd7ec0423640c165351a47dee4a01f085ae152a30a75fe22",
+   "after": "7815142085aa0f97b485e7e640bd5ec6022765446ed0e196c8bec3ca36aa1ea6"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".media_menu (media_menu)",
+   "before": "7815142085aa0f97b485e7e640bd5ec6022765446ed0e196c8bec3ca36aa1ea6",
+   "after": "9f3d411fde126cc18cf55fc6abe45ddd6debb2742e7a354c0af119e90c40baf1"
+  },
+  {
+   "file": "src/top.v",
+   "anchor": ".BAUD_RATE(32'd115200), //input 32",
+   "before": "9f3d411fde126cc18cf55fc6abe45ddd6debb2742e7a354c0af119e90c40baf1",
+   "after": "9038b6daabca119d4ed0bdead8e0fe1037e54a9802146bc081e5d75769cabb52"
+  },
+  {
+   "file": "src/rtl/BSP/uart/uart.v",
+   "anchor": "wire  [1:0] div_correct = 'd3;",
+   "before": "160c1a918e0c4949bbc54debc9e82d1a4c8a6e7734746642937c1a2722fbf234",
+   "after": "ce45cd48fb452044e923e77001f49a921c0f8de66d557c115f02db06fab66257"
+  },
+  {
+   "file": "src/rtl/BSP/uart/uart.v",
+   "anchor": "uart_rxd_debounced <= uart_rxd_shreg[0]|uart_rxd_shreg[1]|uart_rxd_shreg[2]|uart_rxd_shreg[3];",
+   "before": "ce45cd48fb452044e923e77001f49a921c0f8de66d557c115f02db06fab66257",
+   "after": "4f6fac0f7289d64f902ef2540e32e902160545070b0af37d6dcb0724b870d767"
+  },
+  {
+   "file": "evt1_x2.gprj",
+   "anchor": "<File path=\"src/rtl/BSP/chromatic_media.v\" type=\"file.verilog\" enable=\"1\"/>",
+   "before": "46c9613d4b79658a2d1dfb26025d3af595895c3f6eebd1c553ca89682160c943",
+   "after": "03b0e779b0154ae90910054b34c55b62ee96afbbee66e38c5fc451d5e5599243"
+  }
+ ],
+ "link_sdc": {
+  "file": "src/board/evt1_x2/evt1_x2.sdc",
+  "anchor": "report_timing -hold -from_clock [get_clocks {sclk}] -to_clock [get_clocks {sclk}] -max_paths 24 -max_common_paths 24",
+  "before": "358cc8d2062da69767a7c2687a245fc18d126ab42719524ad1ae26a1e7822cce",
+  "after": "e1d47270618cd214d4e7e42ad6e47e41f1e4801651d6b90a218abac264ed6244"
+ },
+ "link_process": [
+  {
+   "file": "impl/evt1_x2_process_config.json",
+   "upstream": "\"Replicate_Resources\": false,",
+   "staged": "\"Replicate_Resources\": true,",
+   "anchor": "\"Replicate_Resources\": false,",
+   "before": "a317fab7e77aafed8ada66c90b05f6b28cf42bec1a7c45d5d946196cc3b30527",
+   "after": "1f8c7e06a569ade2ecd3f6b68d00f77e678a24e0e3b59bb3b8aa95b8ff306e6a"
+  },
+  {
+   "file": "impl/evt1_x2_process_config.json",
+   "upstream": "\"Route_Maxfan\": 23,",
+   "staged": "\"Route_Maxfan\": 10,",
+   "anchor": "\"Route_Maxfan\": 23,",
+   "before": "1f8c7e06a569ade2ecd3f6b68d00f77e678a24e0e3b59bb3b8aa95b8ff306e6a",
+   "after": "af501e1592b05bf5808afe1bf627f76f762ccfb3bcb9c9a86c34f0779f81e41a"
+  }
+ ],
+ "rtl": {
+  "chromatic_pocket_link.v": "8616d763f43bca108c1af55317ffdf801db9ac03336557f04e2f98212ed6f6f6",
+  "byte_fifo.v": "b3d516482e5291351db5a58c1442d9e4cd36ef291d9011f9d62620e69e905a22",
+  "gb_link_byte.v": "ce202c215e293ecff5c0c1ad22e192e9e5f57d0177089b25b51f4b38697984b6",
+  "gb_link_stream.v": "3dac794752e156df8d5004356d3b024c3a8d4dfa40c9e8ee9a65032b7aac0cc0",
+  "link_mode_guard.v": "372c47e7b4e2d92437fef34bce63222bc6a9ea2e26d3db8c28ce16a63e2a038f"
+ },
+ "link_hooks_from": "scripts/check_pocket_link_patch.py patches()",
+ "process_options_unchanged": [
+  "JTAG false",
+  "RECONFIG_N false",
+  "Multi_Boot false"
+ ],
+ "built": false,
+ "reviewed": false,
+ "device": "GW5A-EV25UG256CC1/I0 (set_device in build.tcl, unchanged)"
+}

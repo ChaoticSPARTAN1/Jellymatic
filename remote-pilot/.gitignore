@@ -1,0 +1,10 @@
+# Private, per-PC data: pairing keys, settings, captures, logs and the Python environment.
+local/
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.venv/
+venv/
+*.log

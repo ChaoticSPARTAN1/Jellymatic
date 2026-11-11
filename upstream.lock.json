@@ -1,0 +1,42 @@
+{
+  "about": "Exact upstream sources Jellymatic builds on or reuses. scripts/Get-Upstreams.ps1 clones the first two into upstream/ (ignored by Git).",
+  "chromatic_fpga": {
+    "repository": "https://github.com/ModRetro/oss-chromatic-console-fpga",
+    "tag": "v18.14",
+    "commit": "a01aa375147943cbcd4a41f41585220d55e0c28a",
+    "gameboy_mister_submodule": "44f43d5797cf",
+    "license": "GPL-3.0",
+    "role": "base of the console chip (FPGA) images 18.40 (sound) and 18.41 (sound + Pocket link); never edited in place"
+  },
+  "esp_idf": {
+    "repository": "https://github.com/espressif/esp-idf",
+    "tag": "v5.3",
+    "commit": "e0991facf5ecb362af6aac1fae972139eb38d2e4",
+    "target": "esp32",
+    "license": "Apache-2.0",
+    "role": "build framework of the start-up menu (launcher) and its custom bootloader"
+  },
+  "chromatic_mcu": {
+    "repository": "https://github.com/ModRetro/oss-chromatic-console-mcu",
+    "commit": "63ed3b62b16768ad2415c9e3b865b438ca40fcc6",
+    "license": "GPL-3.0",
+    "role": "reference only (serial protocol, flash layout); no code copied, never built or installed by Jellymatic"
+  },
+  "roboto": {
+    "repository": "https://github.com/googlefonts/roboto-2",
+    "tag": "v2.138",
+    "commit": "ab4876f650a4aeb9b661c83fee47f908c739bb70",
+    "url": "https://github.com/googlefonts/roboto-2/releases/download/v2.138/roboto-unhinted.zip",
+    "zip_sha256": "70f64c718510a601fbcf752aafe644314dacaeb85474dc689c89787c4a72a728",
+    "member": "Roboto-Medium.ttf",
+    "ttf_sha256": "b398bb9c791ddb08f1063d9c874f98e8aadb99132043b2d272a9276cf90c465a",
+    "license": "Apache-2.0 (Copyright 2011 Google Inc.)",
+    "role": "source of pocket/ui_font.h, rebuilt by scripts/build_ui_font.py (only needed to change the font)"
+  },
+  "jellyfin_ux": {
+    "repository": "https://github.com/jellyfin/jellyfin-ux",
+    "commit": "69a2b7b1237732a134dd501ff55b9404cf2d1601",
+    "license": "CC BY-SA 4.0",
+    "reused": "branding icon-transparent.png, scaled (chromatic/launcher/shared/launcher_art.h, scripts/chromatic_theme.py JELLYFIN_MARK)"
+  }
+}

@@ -1,0 +1,66 @@
+Jellymatic
+Copyright (C) 2026 ChaoticSPARTAN1
+
+Jellymatic is free software: you can redistribute it and/or modify it under the terms of the GNU General
+Public License as published by the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version, with the additional terms and permissions in ADDITIONAL-TERMS.md (GPLv3 section 7).
+It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.
+
+Jellymatic is an independent project, not affiliated with ModRetro or the Jellyfin project, and not made,
+endorsed or supported by ModRetro, Analogue or the Jellyfin project. Use it at your own risk.
+
+This repository also contains material by others, under their own licences:
+
+- fpga/images/*/src/: files of ModRetro's Chromatic FPGA design v18.14
+  (https://github.com/ModRetro/oss-chromatic-console-fpga, commit a01aa375, GPL-3.0), modified by
+  ChaoticSPARTAN1 for Jellymatic, 2026-11. The modified ModRetro files are:
+    fpga/images/sound-18.40/src/top.v
+    fpga/images/sound-18.40/src/rtl/BSP/system_monitor.sv
+    fpga/images/sound-18.40/src/rtl/EMU/emu_system_top.v
+    fpga/images/sound-18.40/src/rtl/EMU/cart.v
+    fpga/images/sound-18.40/src/rtl/EMU/CORE/gb.v
+    fpga/images/sound-18.40/src/board/evt1_x2/evt1_x2.sdc
+    fpga/images/link-18.41/src/top.v
+    fpga/images/link-18.41/src/rtl/BSP/system_monitor.sv
+    fpga/images/link-18.41/src/rtl/BSP/uart/uart.v
+    fpga/images/link-18.41/src/rtl/EMU/emu_system_top.v
+    fpga/images/link-18.41/src/rtl/EMU/cart.v
+    fpga/images/link-18.41/src/rtl/EMU/CORE/gb.v
+    fpga/images/link-18.41/src/board/evt1_x2/evt1_x2.sdc
+    fpga/images/link-18.41/evt1_x2.gprj and fpga/images/link-18.41/build_options.tcl (project files;
+    the 18.40 image changes the same two project files, which its stage receipt records)
+  Each change is marked in the file ("Chromatic media", "Chromatic pocket link"); the stage receipts
+  (fpga/images/*/stage-receipt.json) list every change with the SHA-256 before and after. gb.v comes from
+  the MiSTer handheld core "Gameboy_MiSTer" (GPL-3.0-or-later). Their own notices are kept in the files.
+  The other files there (chromatic_media.v, pocket_link/) are Jellymatic's own (GPL-3.0-or-later).
+- fpga/images/link-18.41/src/rtl/BSP/uart/uart.v: its header names GaoYun Semi (Gowin) as its creator; it
+  came to ModRetro's design from Gowin's reference material, and ModRetro publishes it in its repository
+  under that repository's GPL-3.0. It is kept as ModRetro ships it apart from Jellymatic's marked hook.
+- The uart_tx_busy one-cycle gap fix in fpga/images/link-18.41/src/rtl/BSP/system_monitor.sv is taken from
+  Shiny Relay 1.1.5 (Shiny Gen, GPL-3.0), and rtl/chromatic_pocket_link.v follows Shiny Relay's
+  request-once status channel pattern (link_ev_req). Both are marked in the files.
+- chromatic/fpga-media/sim/speedcontrol_model.v: a Verilog translation, for simulation only, of speedcontrol.vhd
+  from ModRetro's design (which comes from the MiSTer core, Gameboy_MiSTer), translated by
+  ChaoticSPARTAN1 for Jellymatic, 2026-11. GPL-3.0, as ModRetro publishes the original; ADDITIONAL-TERMS.md
+  does not apply to it.
+- rtl/uart2_vhdl_port.v: a Verilog port, for simulation only, of "Simple UART for FPGA" by Jakub Cabal
+  (MIT, LICENSES/MIT-uart_for_fpga.txt), as included in ModRetro's design.
+- chromatic/launcher/bootloader_components/main/bootloader_start.c: from Espressif ESP-IDF, Copyright
+  2015-2022 Espressif Systems (Shanghai) CO LTD, Apache-2.0 (LICENSES/Apache-2.0.txt); modified.
+- The Jellyfin logo (scaled pixel versions in chromatic/launcher/shared/launcher_art.h,
+  scripts/chromatic_theme.py and docs/images/): Copyright the Jellyfin contributors, CC BY-SA 4.0
+  (LICENSES/CC-BY-SA-4.0-Jellyfin-logo.txt). The scaled versions are under the same licence.
+- pocket/ui_font.h: a glyph coverage table made by scripts/build_ui_font.py from the Roboto Medium
+  font (Roboto 2.138, Copyright 2011 Google Inc., Apache License 2.0, LICENSES/Apache-2.0.txt);
+  rasterized and scaled, no other content.
+- scripts/chromatic_gui_fonts/ and remote-pilot/fonts/: Press Start 2P and Silkscreen, SIL Open Font
+  License 1.1 (LICENSES/OFL-1.1-*.txt).
+- Not in this repository, but built into the console chip images 18.40 and 18.41 (their notices must go
+  with those images): the T80 CPU core (BSD-style, LICENSES/BSD-style-T80.txt) and the SameBoy-derived
+  boot ROM (MIT, LICENSES/MIT-SameBoy-boot-ROM.txt), both from ModRetro's source.
+
+Details: THIRD-PARTY-NOTICES.md and docs/Credits-and-licences.md.
+
+ModRetro and Chromatic are trademarks of ModRetro, Inc. Jellyfin is a trademark of its owners. Analogue
+and Pocket are trademarks of Analogue.
