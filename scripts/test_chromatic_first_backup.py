@@ -506,7 +506,175 @@ def main():
     check(code == cm.EXIT_OK and rig.said('no full backup of the console yet') and rig.said('your original image'),
           'Check FPGA from an empty folder: full backup first, then the check finds the original')
     check(rig.chip.reads == 3 and rig.console.writes == 0, 'two backup reads and one check read; nothing written')
-    counts['scenarios'] = 7
+
+    # 8. Everything that reads nothing is checked before the ESP32 reads: a missing start-up menu release,
+    # a missing programmer (openFPGALoader) or not exactly one JTAG bridge refuse at once, with no chip read.
+    rig = fresh()
+    m = cm.Manager(folder=rig.work, programmer_factory=lambda: Device(rig.console),
+                   release_loader=lambda: (_ for _ in ()).throw(cm.Refused('No launcher release found.')),
+                   timing=FAST, say=rig.log.append, sleep=lambda s: None,
+                   fpga_loader_factory=lambda logs: Jtag(rig.chip), fpga_timing=FPGA_TIMING)
+    check(m.guarded(m.backup) == cm.EXIT_REFUSED and rig.said('needed to recognise the official firmware'),
+          'no start-up menu release: the full backup refuses and says why')
+    check(rig.console.full_reads == 0 and rig.console.part_reads == [] and rig.chip.reads == 0,
+          'no release: refused before any ESP32 or console chip read')
+    nothing_kept(rig, 'no release')
+
+    class NoTool(Jtag):
+        def check_tool(self):
+            raise cf.Refused('the programmer (openFPGALoader) is missing: see docs/Install-with-Chromatic-Manager.md.')
+    rig = fresh()
+    m = rig.manager()
+    m.fpga_loader_factory = lambda logs: NoTool(rig.chip)
+    check(m.guarded(m.backup) == cm.EXIT_REFUSED and rig.said('openFPGALoader') and rig.console.full_reads == 0
+          and rig.chip.reads == 0, 'no programmer: refused before the ESP32 reads')
+    nothing_kept(rig, 'no programmer')
+    for bridges in (0, 2):
+        chip = Chip()
+        chip.gwu2x = bridges
+        rig = fresh(chip=chip)
+        m = rig.manager()
+        check(m.guarded(m.backup) == cm.EXIT_REFUSED and rig.said('exactly one Chromatic JTAG bridge')
+              and rig.console.full_reads == 0 and chip.reads == 0, f'{bridges} JTAG bridges: refused before the ESP32 reads')
+        nothing_kept(rig, f'{bridges} bridges')
+    counts['refusals'] += 4
+
+    # 9. The same full backup by hand (scripts/chromatic_backup.py, the Install guide's advanced way). Its two
+    # device stages are simulated (they write what the real reads write); everything else runs for real.
+    import chromatic_backup as cb
+    import verify_chromatic_backup as vb
+    latest = HOME / 'chromatic-tools/latest-backup-path.txt'
+    device_calls = []
+    seen = {'esp32': STOCK, 'fpga': FPGA_ORIGINAL}
+
+    def fake_mcu(folder):
+        device_calls.append('mcu')
+        for number in (1, 2):
+            (folder / f'mcu-read-{number}.bin').write_bytes(seen['esp32'])
+        (folder / 'mcu-identity.json').write_text(json.dumps({
+            'chip': IDENTITY['chip'], 'revision': IDENTITY['revision'] * 100, 'mac': IDENTITY['mac'],
+            'flash_id': IDENTITY['flash_id'], 'size': SIZE}), encoding='utf-8')
+        (folder / 'mcu-verified.json').write_text(json.dumps({'size': SIZE, 'sha256': cm.sha(seen['esp32']),
+                                                              'reads': 2}), encoding='utf-8')
+
+    def fake_fpga(folder):
+        device_calls.append('fpga')
+        check(not latest.exists(), 'by hand: nothing recorded while the console chip is read')
+        for number in (1, 2):
+            (folder / f'fpga-read-{number}.bin').write_bytes(seen['fpga'])
+        (folder / 'same-unit-usb-proof.json').write_text(json.dumps({'serial_disappeared_during_fpga_read': True}),
+                                                         encoding='utf-8')
+        (folder / 'fpga-verified.json').write_text(json.dumps({'size': SIZE, 'sha256': cm.sha(seen['fpga']),
+                                                               'reads': 2}), encoding='utf-8')
+        return True, True
+
+    cb.mcu_backup, cb.fpga_backup, cb.load_release = fake_mcu, fake_fpga, lambda: RELEASE
+    cb.CONSOLE = __import__('io').StringIO()
+
+    def by_hand(*argv):
+        cb.CONSOLE.seek(0)
+        cb.CONSOLE.truncate()
+        code = cb.main(list(argv))
+        return code, cb.CONSOLE.getvalue()
+
+    def made_folder(said):
+        return HOME / said.split('--folder ')[1].split()[0]
+
+    empty_folders()
+    code, said = by_hand('mcu')
+    check(code == 0 and device_calls == ['mcu'], 'by hand: the ESP32 stage runs')
+    check(not latest.exists(), 'by hand: the ESP32 stage records nothing (L-a: the record used to be written here)')
+    folder = made_folder(said)
+    check(folder.is_dir() and folder.name.startswith(cm.FULL_BACKUP_PREFIX), 'by hand: the ESP32 stage names its folder')
+    # The record is written only after the bundle exists in both copies and checks out.
+    copy_bundle, order = vb.copy_bundle, []
+
+    def watched_copy(bundle, target):
+        order.append(('copy', latest.exists()))
+        return copy_bundle(bundle, target)
+    vb.copy_bundle = watched_copy
+    try:
+        code, said = by_hand('fpga', '--folder', folder.name)
+    finally:
+        vb.copy_bundle = copy_bundle
+    check(code == 0 and device_calls == ['mcu', 'fpga'] and 'Full backup recorded' in said, 'by hand: the console chip stage runs')
+    check(order == [('copy', False)], 'by hand: nothing was recorded before the second copy was made')
+    check(Path(latest.read_text(encoding='utf-8').strip()).resolve() == folder.resolve(), 'by hand: recorded last, pointing at the backup')
+    second = SECOND / folder.name
+    receipt = json.loads((folder / 'completion-receipt.json').read_text(encoding='utf-8'))
+    check(Path(receipt['secondary_bundle']).resolve() == second.resolve() and len(list(second.iterdir())) == 3, 'by hand: second copy and receipt')
+    preflight.check_checkpoint(json.loads((folder / 'recovery-validation.json').read_text(encoding='utf-8')))
+    check(tr.load_stock().image == STOCK and cf.OriginalBackup.load().image == FPGA_ORIGINAL,
+          'by hand: both loaders read the recorded backup from disk')
+    # With a full backup recorded, both stages refuse at once: the console is not touched, nothing changes.
+    pointer, calls = latest.read_bytes(), len(device_calls)
+    for stage in (('mcu',), ('fpga', '--folder', folder.name)):
+        code, said = by_hand(*stage)
+        check(code == 1 and cm.ALREADY_RECORDED[:40] in said.replace('A full', 'a full'),
+              f'by hand: {stage[0]} stage refused while a full backup is recorded (same wording as the Manager)')
+    check(len(device_calls) == calls and latest.read_bytes() == pointer
+          and len(list(HOME.glob(cm.FULL_BACKUP_PREFIX + '*'))) == 1, 'by hand: nothing read, the record unchanged')
+    # ... also when that record cannot be checked (second copy unplugged): never replaced.
+    shutil.rmtree(second)
+    code, said = by_hand('mcu')
+    check(code == 1 and len(device_calls) == calls and latest.read_bytes() == pointer,
+          'by hand: an unchecked recorded backup is never replaced either')
+
+    # A second copy that does not check out: nothing is recorded and what the step made is removed.
+    empty_folders()
+    device_calls.clear()
+    code, said = by_hand('mcu')
+    folder = made_folder(said)
+
+    def damaged_copy(bundle, target):
+        copy_bundle(bundle, target)
+        victim = next(p for p in Path(target).iterdir() if p.name.endswith('fpga_flash_4MB.bin'))
+        data = bytearray(victim.read_bytes())
+        data[10] ^= 1
+        victim.write_bytes(bytes(data))
+        return target
+    vb.copy_bundle = damaged_copy
+    try:
+        code, said = by_hand('fpga', '--folder', str(folder))
+    finally:
+        vb.copy_bundle = copy_bundle
+    check(code == 1 and 'not recorded' in said and not latest.exists(), 'by hand: a bad second copy is never recorded')
+    check(not (folder / 'restore-bundle').exists() and not (SECOND / folder.name).exists()
+          and not (folder / 'completion-receipt.json').exists(), 'by hand: the bundle and second copy were removed')
+    code, said = by_hand('fpga', '--folder', folder.name)
+    check(code == 1 and 'never overwritten' in said and device_calls == ['mcu', 'fpga'],
+          'by hand: a folder with console chip reads is not read over again')
+
+    # Checks that read nothing come first: no release refuses before the ESP32 is read; a console that is not
+    # the official firmware as it comes, or a console chip with a Jellymatic image, is not kept or recorded.
+    empty_folders()
+    device_calls.clear()
+    cb.load_release = lambda: (_ for _ in ()).throw(cm.Refused('No launcher release found.'))
+    code, said = by_hand('mcu')
+    check(code == 1 and 'needed to recognise' in said and device_calls == [] and not kept_files(),
+          'by hand: no start-up menu release refuses before the ESP32 is read')
+    cb.load_release = lambda: RELEASE
+    installed = cm.put(cm.put(cm.put(STOCK, cm.BOOT, RELEASE.bootloader), cm.TABLE, RELEASE.table), cm.SLOT_APP,
+                       RELEASE.launcher)
+    seen['esp32'] = installed
+    code, said = by_hand('mcu')
+    check(code == 1 and 'does not run the official ModRetro firmware' in said and not kept_files(),
+          'by hand: a console with the start-up menu is refused and its reads are not kept')
+    seen['esp32'] = STOCK
+    ours = bitstream(55, length=700_000)
+    saved_pin, cf.LINK_BIN_SHA256 = cf.LINK_BIN_SHA256, cf.sha(ours.rstrip(b'\xff'))
+    try:
+        seen['fpga'] = ours
+        code, said = by_hand('mcu')
+        folder = made_folder(said)
+        code, said = by_hand('fpga', '--folder', folder.name)
+        check(code == 1 and 'Jellymatic' in said and not latest.exists() and not folder.exists(),
+              'by hand: a console chip with a Jellymatic image is refused, nothing kept or recorded')
+    finally:
+        cf.LINK_BIN_SHA256 = saved_pin
+        seen['fpga'] = FPGA_ORIGINAL
+    counts['by_hand'] = 9
+    counts['scenarios'] = 9
 
     print(f'PASS: first full backup from an empty per-user folder: status with no backup, {counts["refusals"]} '
           'refusals with nothing kept or written (unknown ESP32 model, unknown console chip, ESP32 and console chip '
@@ -517,7 +685,10 @@ def main():
           'the disk is back); the backup reads both chips twice, saves the bundle and its second copy, writes the '
           'completion receipt and recovery check, registers last; load_stock, OriginalBackup.load, the preflight and '
           'the AI rule read it from disk; Install and Check FPGA from an empty folder take the backup first, a '
-          f'failed backup stops them. Synthetic stock image, simulated chips, {ESPTOOL}, no hardware.')
+          'failed backup stops them; no release, no programmer or not one JTAG bridge refuse before any chip read; '
+          f'the by-hand chromatic_backup.py ({counts["by_hand"]} groups of checks) records only after the bundle and '
+          'its second copy check out, refuses at once while a full backup is recorded, and keeps no non-original. '
+          f'Synthetic stock image, simulated chips, {ESPTOOL}, no hardware.')
 
 
 if __name__ == '__main__':

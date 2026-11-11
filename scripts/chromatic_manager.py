@@ -662,6 +662,12 @@ FULL_BACKUP_PREFIX = 'chromatic-backup-'  # <your Jellymatic folder>/chromatic-b
 LATEST_FULL_BACKUP = 'chromatic-tools/latest-backup-path.txt'  # in the per-user folder: the full backup's record
 BACKUP_UNCHECKED = ('your full backup exists but could not be checked in both copies. Is the second-copy disk (or '
                     'USB stick) connected? Nothing was read or written.')
+# A full backup is recorded: the Manager's full backup and the by-hand chromatic_backup.py refuse with this.
+ALREADY_RECORDED = ('a full backup is already recorded on this PC, and it is never replaced. Nothing was read or '
+                    'written.')
+NO_RELEASE_FOR_BACKUP = ('the start-up menu release (release/launcher, see docs/Install-with-Chromatic-Manager.md) is '
+                         'needed to recognise the official firmware, so no full backup is made. Nothing was read, saved '
+                         'or written.')
 NOT_ORIGINAL = ('the console does not run the official ModRetro firmware as it comes ({what}), so it is not taken as '
                 'your original. Put the official firmware back with ModRetro\'s own updater first (docs/Recovery.md, '
                 '"Official updates and restoring Chromatic OS"), then press Back up again. Nothing was saved or '
@@ -979,9 +985,14 @@ class Manager:
         erased, as in every backup. Raises Refused or StepFailed (nothing written) on any problem."""
         import chromatic_fpga as cf
         import verify_chromatic_backup as vb
+        # Everything that can be checked without reading a chip is checked first, so a missing piece
+        # refuses at once instead of after the two long ESP32 reads: the record, the start-up menu release
+        # (needed to recognise the official firmware), the console chip programmer and its JTAG bridge.
         if full_backup_recorded():
-            raise Refused('a full backup is already recorded on this PC, and it is never replaced. Nothing was read or '
-                          'written.')
+            raise Refused(ALREADY_RECORDED)
+        release = self._release_for_backup()
+        staging = self.folder / 'full-backup-reads'
+        loader, timing = self._fpga_loader(cf, staging)
         self.stop_point()
         self.say('Full backup, part 1 of 3: the ESP32 flash, read twice (about 13 minutes; every chunk is checked on '
                  'the chip). Nothing is written to the console.')
@@ -1011,14 +1022,6 @@ class Manager:
         # The original must be the official firmware exactly as it comes: ModRetro's bootloader, partition
         # table and firmware, with the start-up menu's area empty (describe() == 'stock'). A console that
         # already has the start-up menu, a half install or anything else is refused.
-        try:
-            release = self.release_loader()
-        except Refused:
-            release = None
-        if release is None:
-            raise Refused('the start-up menu release (release/launcher, see docs/Install-with-Chromatic-Manager.md) is '
-                          'needed to recognise the official firmware, so no full backup is made. Nothing was saved or '
-                          'written.')
         state = describe(mcu, release).name
         if state != 'stock':
             raise Refused(NOT_ORIGINAL.format(what=f'its ESP32 reads as "{state}"'))
@@ -1026,11 +1029,10 @@ class Manager:
         self.stop_point()
         self.say('Full backup, part 2 of 3: the console chip (FPGA) flash over its JTAG bridge, read twice (about a '
                  'minute; the screen goes dark, then the console restarts). Nothing is written.')
-        staging = self.folder / 'full-backup-reads'
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir(parents=True)
         try:
-            fpga_reads, serial_left, (serial_back, bridge_back) = self._read_fpga_twice(cf, staging)
+            fpga_reads, serial_left, (serial_back, bridge_back) = self._read_fpga_twice(loader, timing, staging)
         finally:
             shutil.rmtree(staging, ignore_errors=True)
         if not serial_left:
@@ -1074,14 +1076,30 @@ class Manager:
                      'it starts from its untouched flash as before.')
         return folder
 
-    def _read_fpga_twice(self, cf, staging):
-        """Two full reads of the console chip flash ([image, image]), whether the console's USB serial
-        interface went away during the first, and (serial back, one JTAG bridge) after the FPGA was
-        reconfigured from its flash. Read commands only: --detect, --dump-flash, --reset."""
+    def _release_for_backup(self):
+        """The start-up menu release, needed before the full backup to recognise the official firmware
+        (describe() == 'stock'). Refused, before anything is read, when there is none."""
+        try:
+            release = self.release_loader()
+        except Refused:
+            release = None
+        if release is None:
+            raise Refused(NO_RELEASE_FOR_BACKUP)
+        return release
+
+    def _fpga_loader(self, cf, staging):
+        """(loader, timing) for the console chip reads of the full backup, after the checks that read
+        nothing: the programmer (openFPGALoader) is there, and Windows lists exactly one JTAG bridge and the
+        console's USB serial interface (enumeration only). Refused before any chip is read otherwise."""
         timing = self.fpga_timing or cf.FpgaTiming()
         factory = self.fpga_loader_factory or (lambda logs: cf.JtagLoader(logs, timing=timing))
         loader = factory(staging / 'logs')
         loader.check_tool()
+        self._one_bridge(loader)
+        return loader, timing
+
+    @staticmethod
+    def _one_bridge(loader):
         found = loader.present()
         if found['gwu2x'] != 1:
             raise Refused(f'expected exactly one Chromatic JTAG bridge (GWU2X) on USB; found {found["gwu2x"]}. Plug in '
@@ -1089,6 +1107,14 @@ class Manager:
         if not found['serial']:
             raise Refused('the console\'s USB serial interface is not there. Switch it on and try again. Nothing was '
                           'saved or written.')
+
+    def _read_fpga_twice(self, loader, timing, staging):
+        """Two full reads of the console chip flash ([image, image]), whether the console's USB serial
+        interface went away during the first, and (serial back, one JTAG bridge) after the FPGA was
+        reconfigured from its flash. Read commands only: --detect, --dump-flash, --reset. The loader
+        comes from _fpga_loader (programmer checked); the bridge is looked for again here."""
+        import chromatic_fpga as cf
+        self._one_bridge(loader)
         chip = loader.detect()
         if chip.get('idcode') != cf.IDCODE or cf.FAMILY not in str(chip.get('family', '')):
             raise Refused('the console chip is not the GW5A-25 this tool knows. Nothing was saved or written.')

@@ -47,7 +47,8 @@ anchor must match or they stop. `scripts\stage_chromatic_fpga_media.py` does the
 
 `fpga\images\link-18.41\` and `fpga\images\sound-18.40\` hold the **exact sources and receipts** of the
 reviewed images, but not the images themselves. To use an image, put the **official release files**
-`evt1_x2.fs` and `evt1_x2.bin` (published separately as release assets) in that folder's `build\`. The
+`evt1_x2.fs` and `evt1_x2.bin` (in `Jellymatic-FPGA-images-<version>.zip` on the
+[Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest)) in that folder's `build\`. The
 Manager refuses any image whose bytes differ from its receipt (and, for 18.41, from the SHA-256 pins in
 `scripts\chromatic_fpga.py`). A build of your own is almost never byte-identical (any other Gowin version,
 setting or IP changes the bytes), so it will not match the pins and is refused; that is on purpose, because only the reviewed image

@@ -20,8 +20,15 @@
 ## 2. Get the start-up menu image
 
 The Manager installs the three files in `release\launcher\` (`bootloader\bootloader.bin`,
-`partition_table\partition-table.bin`, `chromatic_launcher.bin`). Either copy them there from a published
-release, or build them yourself with `scripts\Build-ChromaticLauncher.ps1`
+`partition_table\partition-table.bin`, `chromatic_launcher.bin`). The easy way:
+
+1. Open the [Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest) (the latest
+   Jellymatic release).
+2. Download **`Jellymatic-start-up-menu-<version>.zip`**.
+3. Extract it **into your Jellymatic folder** (the one with `Chromatic-Manager-Window.cmd`), keeping its
+   folders: the three files land in `release\launcher\`, next to their licence notices and `SHA256SUMS`.
+
+Or build them yourself with `scripts\Build-ChromaticLauncher.ps1`
 ([Building from source](Building-from-source.md#start-up-menu)).
 
 ## 3. Install
@@ -46,7 +53,8 @@ release, or build them yourself with `scripts\Build-ChromaticLauncher.ps1`
 <img src="images/manager-fix.png" width="400" alt="Manager: Fix a problem">
 </p>
 
-Updating later is the same: when `release\launcher\` holds a newer menu, Home shows **Update to x.y.z**.
+Updating later is the same: extract the newer release zip the same way; when `release\launcher\` holds a
+newer menu, Home shows **Update to x.y.z**.
 
 ## The window
 
@@ -106,8 +114,12 @@ put it on another disk or a USB stick: set `JELLYMATIC_SECOND_COPY` to a folder 
 backup (for example `setx JELLYMATIC_SECOND_COPY "E:\Jellymatic-Backups"`, then open a new window).
 
 Advanced, the same backup by hand (read-only tools, in a PowerShell window in the Jellymatic folder):
-`scripts\chromatic_backup.py mcu`, then `scripts\chromatic_backup.py fpga --folder "<the folder it made>"`,
-then `scripts\verify_chromatic_backup.py "<that folder>" --create-bundle --second-copy "<another disk>"`.
+`scripts\chromatic_backup.py mcu`, then `scripts\chromatic_backup.py fpga --folder <the folder name it shows>`
+(add `--second-copy "<another disk>"` to choose where the second copy goes). The second step also makes the
+restore bundle and its second copy and checks both; only then is the backup recorded as your original. The
+same rules apply as in the Manager: both steps refuse at once, before touching the console, when a full
+backup is already recorded, and they need the start-up menu files in `release\launcher\` to recognise the
+official firmware.
 
 ## Jellyfin sound (FPGA 18.40)
 
@@ -115,8 +127,10 @@ then `scripts\verify_chromatic_backup.py "<that folder>" --create-bundle --secon
 original image), a rehearsal that writes your original image back and checks it (so the undo is proven on
 your console first), then the sound image, read back byte for byte. Needs the full backup above,
 openFPGALoader, and the **official release files** `evt1_x2.fs` + `evt1_x2.bin` of the sound image in
-`fpga\images\sound-18.40\build\` (published separately as release assets, see
-[What you need](What-you-need.md#for-jellyfin-sound-and-the-pocket-link)).
+`fpga\images\sound-18.40\build\`. Download **`Jellymatic-FPGA-images-<version>.zip`** from the
+[Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest) and extract it into your
+Jellymatic folder, keeping its folders: it puts both images (18.40 and 18.41) in their `build\` folders
+(see [What you need](What-you-need.md#for-jellyfin-sound-and-the-pocket-link)).
 
 ## Update the Pocket link in one step (FPGA 18.41)
 
@@ -136,7 +150,8 @@ openFPGALoader, and the **official release files** `evt1_x2.fs` + `evt1_x2.bin` 
 
 The Manager accepts only the reviewed 18.41 image: its `.fs`, `.bin` and stage receipt are pinned by
 SHA-256 in `scripts/chromatic_fpga.py`. Any other build is refused, including your own build of the same
-sources (it is almost never byte-identical), so use the official release files.
+sources (it is almost never byte-identical), so use the official release files from
+`Jellymatic-FPGA-images-<version>.zip` on the [Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest).
 
 ## Text menu
 

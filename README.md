@@ -78,16 +78,21 @@ Jellyfin. Full documentation: [RemotePilot](https://github.com/ChaoticSPARTAN1/R
    is changed on the console.
 2. **Get the tools** ([What you need](docs/What-you-need.md)): a Windows PC, Python 3.12+, the USB cable,
    openFPGALoader with GWU2X support (for the first backup), and your Chromatic switched **on**.
-3. **Open Chromatic Manager**: double-click `Chromatic-Manager-Window.cmd` (first run sets everything up;
+3. **Download the release files** from the [Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest):
+   `Jellymatic-start-up-menu-<version>.zip` (the start-up menu) and, for Jellyfin sound and the Pocket link,
+   `Jellymatic-FPGA-images-<version>.zip`. Extract both **into your Jellymatic folder** (the one with
+   `Chromatic-Manager-Window.cmd`), keeping their folders: they fill `release\launcher\` and
+   `fpga\images\*\build\`.
+4. **Open Chromatic Manager**: double-click `Chromatic-Manager-Window.cmd` (first run sets everything up;
    see [Install with Chromatic Manager](docs/Install-with-Chromatic-Manager.md)).
-4. **Press the one big button** the Manager shows (Install), then **Approve**. The first time it takes a
+5. **Press the one big button** the Manager shows (Install), then **Approve**. The first time it takes a
    full backup of both chips (about 15 minutes, nothing written), then writes the start-up menu, reads
    every byte back and checks the console starts. The backup's second copy is usually on the same disk;
    put it on another disk or a USB stick for real safety ([Install](docs/Install-with-Chromatic-Manager.md#full-backup-before-any-fpga-change)).
-5. **On the console**: switch it off and on, choose **Jellyfin**, press **Select** for setup, add your
+6. **On the console**: switch it off and on, choose **Jellyfin**, press **Select** for setup, add your
    Wi-Fi and sign in to Jellyfin with **Quick Connect**
    ([First run on the console](docs/First-run-on-the-console.md)).
-6. **Play**: choose a film or episode and press A ([Using Jellyfin](docs/Using-Jellyfin-on-the-Chromatic.md)).
+7. **Play**: choose a film or episode and press A ([Using Jellyfin](docs/Using-Jellyfin-on-the-Chromatic.md)).
 
 Something went wrong? [Recovery](docs/Recovery.md) explains what the Manager does by itself, and how to put
 everything back, including with ModRetro's **official** update tool.
@@ -129,7 +134,9 @@ docs/                   the wiki
 **Not in this repository:** ModRetro's firmware or updater, any console backup, built firmware images,
 the Gowin FPGA tools or licence, and anything personal. The start-up menu you can build yourself. **Jellyfin
 sound and the Pocket link need the official release files** of the console chip (FPGA) images 18.40 and
-18.41 (`evt1_x2.fs` and `evt1_x2.bin`), published separately as release assets: a build of your own will
+18.41 (`evt1_x2.fs` and `evt1_x2.bin`), published separately as release assets on the
+[Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest) (`Jellymatic-FPGA-images-<version>.zip`, with
+the ready-built start-up menu in `Jellymatic-start-up-menu-<version>.zip`): a build of your own will
 not match the SHA-256 pins the Manager checks, so it is refused (see [What you need](docs/What-you-need.md)).
 Your own files (Wi-Fi list, Jellyfin sign-in, backups) live in a per-user folder, `%LOCALAPPDATA%\Jellymatic`,
 created on first run and never part of Git.

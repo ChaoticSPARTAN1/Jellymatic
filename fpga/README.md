@@ -12,7 +12,9 @@ SHA-256.
 | `images/link-18.41/` | 18.41 | 18.40 + the Pocket link bridge (link port ↔ start-up menu) |
 
 The bitstreams (`build/evt1_x2.fs`, `build/evt1_x2.bin`) are **not** in Git. Jellyfin sound and the Pocket link
-need the **official release files**, published separately as release assets: put them in the folder's `build/`.
+need the **official release files**, published separately as release assets: download
+`Jellymatic-FPGA-images-<version>.zip` from https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest and
+extract it into the Jellymatic folder, keeping its folders (it puts them in each folder's `build/`).
 Chromatic Manager refuses an image that does not match its receipt, and for 18.41 also the SHA-256 pins in
 `scripts/chromatic_fpga.py`, so a build of your own will not match and is refused
 ([docs/Building-from-source.md](../docs/Building-from-source.md#console-chip-fpga-images)).
