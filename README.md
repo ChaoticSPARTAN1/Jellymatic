@@ -7,8 +7,9 @@
   a link to the Analogue Pocket, and a PC tool that installs, checks and undoes everything.
 </p>
 <p align="center">
-  <b>Read the guide:</b> <a href="docs/Jellymatic-Guide.pdf">docs/Jellymatic-Guide.pdf</a> (opens right on GitHub),
-  or download and double-click <code>Open-Documentation.html</code> for the interactive version.
+  <b>Read the guide online:</b> <a href="https://chaoticspartan1.github.io/Jellymatic/">chaoticspartan1.github.io/Jellymatic</a>,
+  as a PDF: <a href="docs/Jellymatic-Guide.pdf">docs/Jellymatic-Guide.pdf</a> (opens right on GitHub),
+  or offline: download and double-click <code>Open-Documentation.html</code>.
 </p>
 
 <p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
