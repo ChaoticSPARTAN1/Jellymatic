@@ -17,3 +17,4 @@ rtl/gb_link_byte.v -text
 rtl/gb_link_stream.v -text
 rtl/link_mode_guard.v -text
 *.pdf binary
+*.mp4 binary
