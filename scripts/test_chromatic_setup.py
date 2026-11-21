@@ -167,14 +167,24 @@ def source_rules():
         line = next(l for l in writer.splitlines() if call in l)
         if 'if(!pj_pw_allowed(offset,size))return -1;' not in line or not line.index('pj_pw_allowed') < line.index(call):
             raise SystemExit(f'{call} is not guarded by the address check on the same line')
-    if 'return (offset==PJ_PROV_FLASH_A||offset==PJ_PROV_FLASH_B)&&size==PJ_PW_SECTOR;' not in writer:
+    # Launcher 1.6.4: the same writer also writes the apps record (shared/apps_record.h) on its own two sectors; the
+    # wrappers allow exactly the four record sectors, and each commit erases only its own pair (checked in full in
+    # scripts/test_chromatic_launcher.py; the apps commit's power cuts in scripts/test_chromatic_apps.py).
+    if ('return (pj_pw_setup_sector(offset)||pj_pw_apps_sector(offset))&&size==PJ_PW_SECTOR;' not in writer
+            or 'static int pj_pw_setup_sector(uint32_t offset){return offset==PJ_PROV_FLASH_A||offset==PJ_PROV_FLASH_B;}' not in writer
+            or 'static int pj_pw_apps_sector(uint32_t offset){return offset==PJ_APPS_FLASH_A||offset==PJ_APPS_FLASH_B;}' not in writer):
         raise SystemExit('pj_pw_allowed changed')
+    setup_commit = writer[writer.index('int pj_provision_commit_with('):writer.index('int pj_apps_commit_with(')]
+    if 'PJ_APPS_FLASH' in setup_commit or setup_commit.count('pj_pw_setup_sector(') != 2:
+        raise SystemExit('the setup commit must erase and write only the setup record\'s two sectors')
     if not re.search(r'#define PJ_PROV_FLASH_A \(PJ_PROV_FLASH_SLOT\+PJ_PROVISION_OFFSET_A\)', code['shared/provision_write.h']) \
             or '#define PJ_PROV_FLASH_SLOT 0x260000u' not in code['shared/provision_write.h']:
         raise SystemExit('the writer addresses moved')
     functions = re.findall(r'^(?:static )?int (\w+)\(', writer, flags=re.M)
     if set(functions) != {'pj_pw_allowed', 'pj_pw_erased', 'pj_pw_same_record', 'pj_provision_commit_with', 'pj_pw_dev_read',
-                          'pj_pw_dev_erase', 'pj_pw_dev_write', 'pj_provision_commit'}:
+                          'pj_pw_dev_erase', 'pj_pw_dev_write', 'pj_provision_commit',
+                          # 1.6.4: the apps record's commit, the sector-pair checks and the shared device entry
+                          'pj_pw_setup_sector', 'pj_pw_apps_sector', 'pj_apps_commit_with', 'pj_apps_commit', 'pj_pw_run'}:
         raise SystemExit(f'provision_write.c grew functions: {functions}')
     # The screens and binding format no password or token into any text but the record and the Authorization header.
     for name in ('shared/setup_ui.h', 'main/setup_esp32.c', 'shared/quickconnect.h', 'shared/keyboard.h'):

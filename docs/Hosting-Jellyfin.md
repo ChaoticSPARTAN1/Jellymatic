@@ -4,7 +4,8 @@
 [Home](Home.md) › Hosting Jellyfin
 
 **Contents:** [What the console needs](#what-the-console-needs) · [Steps](#steps) ·
-[A separate sign-in per device](#a-separate-sign-in-per-device-recommended) · [Checks](#checks) · [Safety](#safety)
+[A separate sign-in per device](#a-separate-sign-in-per-device-recommended) · [For TV and ChromaTube](#for-tv-and-chromatube-optional) ·
+[Checks](#checks) · [Safety](#safety)
 
 ## What the console needs
 
@@ -35,6 +36,21 @@ changing your password or signing out your TV or phone. Jellymatic never signs o
 You can also make a separate Jellyfin **user** for the console with access to only some libraries
 (Dashboard › Users › Add user, then sign in on the console as that user).
 
+## For TV and ChromaTube (optional)
+
+Local Weather needs no server. The rest is optional and is added to your server only if you set it up:
+
+| App | What is added to your server | Also needed |
+|---|---|---|
+| TV, live channels | **One Live TV tuner** reading a channel list file kept where the server can read it, with a stream limit (2 when added by Chromatic Manager; 1 by default with Chromavision's tools) | **Allow Live TV access** for the console's user |
+| ChromaTube | **One library named "ChromaTube"** on its own folder, and a small container **beside** the server | The console's user may see that library |
+
+Both are added with Chromatic Manager (**Settings › Live TV channels**, **Settings › ChromaTube server**) or with their
+projects' PC tools ([Chromavision](https://github.com/ChaoticSPARTAN1/Chromavision),
+[ChromaTube](https://github.com/ChaoticSPARTAN1/ChromaTube)): add-only, a backup and a dry run first, proof afterwards,
+and an exact undo. An administrator sign-in is needed once, on the PC; it is typed for that one run and never saved.
+The console keeps a normal user's sign-in. No plugin, no restart, and no other device is ever signed out.
+
 ## Checks
 
 | Problem | Try |
@@ -46,7 +62,10 @@ You can also make a separate Jellyfin **user** for the console with access to on
 
 ## Safety
 
-- Keep Jellyfin on your **home network**. Jellymatic does not need it to be reachable from the internet.
+- Keep Jellyfin on your **home network**. Jellymatic does not need it to be reachable from the internet, and neither
+  do TV and ChromaTube (keep ChromaTube's container port off the internet too).
+- Give the console a **normal user**, not an administrator: the administrator is needed only on the PC, only for
+  set-up.
 - If you do expose it, use HTTPS and strong passwords; the console supports `https://` addresses.
 - Never post your server address, user names or tokens in issues or screenshots.
 

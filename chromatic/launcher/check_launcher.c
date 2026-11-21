@@ -242,7 +242,7 @@ static void menu_checks(void) {
         int pokes=f.pokes;f.alive=0;uint32_t quiet=now;now=run(&l,&f,now,now+5000,&restarted);
         CHECK(restarted&&(screen==3||(now-quiet<=PJ_LAUNCH_SILENT_MS+20&&f.pokes==pokes)));CHECK(l.done_reason==PJ_DONE_NO_FPGA_REPLY);
     }
-    /* 1.3.9 ("handover to=stock done=no-fpga-reply" 165 s into a Pocket link session): while the
+    /* 1.3.9 (console, 2026-11-10: "handover to=stock done=no-fpga-reply" 165 s into a Pocket link session): while the
      * Pocket link runs on the Media screen, readings that stop while the link brings the UART back to 115,200 (its
      * bridge fell silent: 1 s to notice, the leave at both rates, the bridge's own 3 s guard) are not a dead FPGA. A gap
      * of 1.5 s and of 5.5 s hands nothing over and the screen stays; a dead FPGA still goes to stock, after
@@ -275,7 +275,8 @@ static void menu_checks(void) {
     /* Other firmware: stock launches; an empty slot only explains; B returns to the menu. */
     memset(&f,0,sizeof(f));f.cart=f.alive=1;restarted=0;pj_launch_init(&l,0);
     now=run(&l,&f,0,1200,&restarted);
-    press(&l,&f,PJ_BTN_DOWN,now);press(&l,&f,PJ_BTN_DOWN,now+20);CHECK(l.selected==PJ_ITEM_OTHER);
+    press(&l,&f,PJ_BTN_DOWN,now);press(&l,&f,PJ_BTN_DOWN,now+5);press(&l,&f,PJ_BTN_DOWN,now+10);press(&l,&f,PJ_BTN_DOWN,now+20);
+    CHECK(l.selected==PJ_ITEM_OTHER); /* 1.6.0: the fifth row (Games, Jellyfin, TV, ChromaTube, Other firmware) */
     press(&l,&f,PJ_BTN_A,now+40);CHECK(l.phase==PJ_L_OTHER&&l.other_selected==0);
     press(&l,&f,PJ_BTN_DOWN,now+60);press(&l,&f,PJ_BTN_A,now+80);
     CHECK(l.phase==PJ_L_OTHER&&l.other_note&&l.other_selected==1);
@@ -286,6 +287,52 @@ static void menu_checks(void) {
     now=run(&l,&f,now+50,now+8000,&restarted);CHECK(!restarted);
     press(&l,&f,PJ_BTN_A,now);CHECK(l.phase==PJ_L_OTHER);
     press(&l,&f,PJ_BTN_A,now+20);now=run(&l,&f,now+30,now+2000,&restarted);CHECK(restarted&&!f.open);CHECK(l.done_reason==PJ_DONE_CLOSED&&l.close_reason==PJ_CLOSE_OTHER_STOCK);
+    /* 1.6.0: five rows in this order, Games first and selected at start; Down and Up wrap; TV and ChromaTube open
+     * the Media screen like Jellyfin and say which app (media_app); B there returns to the menu on the same row;
+     * B on the menu is Games from every row; the Menu button forwarded by the media FPGA is Back on their screen
+     * and nothing on the menu; a silent FPGA still ends in stock from their screen. */
+    CHECK(PJ_ITEM_COUNT==5&&PJ_ITEM_GAMES==0&&PJ_ITEM_MEDIA==1&&PJ_ITEM_TV==2&&PJ_ITEM_TUBE==3&&PJ_ITEM_OTHER==4);
+    CHECK(!strcmp(pj_launch_labels[0],"Games")&&!strcmp(pj_launch_labels[1],"Jellyfin")&&!strcmp(pj_launch_labels[2],"TV")&&
+          !strcmp(pj_launch_labels[3],"ChromaTube")&&!strcmp(pj_launch_labels[4],"Other firmware"));
+    memset(&f,0,sizeof(f));f.cart=f.alive=1;restarted=0;pj_launch_init(&l,0);
+    now=run(&l,&f,0,1200,&restarted);CHECK(l.phase==PJ_L_MENU&&l.selected==PJ_ITEM_GAMES&&l.media_app==PJ_APP_JELLYFIN);
+    {
+        static const pj_launch_item order[6]={PJ_ITEM_MEDIA,PJ_ITEM_TV,PJ_ITEM_TUBE,PJ_ITEM_OTHER,PJ_ITEM_GAMES,PJ_ITEM_MEDIA};
+        for(unsigned k=0;k<6;k++){press(&l,&f,PJ_BTN_DOWN,now);now+=10;CHECK(l.selected==order[k]&&l.phase==PJ_L_MENU);}
+        for(int k=4;k>=0;k--){press(&l,&f,PJ_BTN_UP,now);now+=10;CHECK(l.selected==order[k]);}
+        press(&l,&f,PJ_BTN_UP,now);now+=10;CHECK(l.selected==PJ_ITEM_GAMES); /* back on the first row */
+        press(&l,&f,PJ_BTN_UP,now);now+=10;CHECK(l.selected==PJ_ITEM_OTHER);press(&l,&f,PJ_BTN_DOWN,now);now+=10;CHECK(l.selected==PJ_ITEM_GAMES);
+    }
+    for(unsigned app=PJ_APP_JELLYFIN;app<=PJ_APP_TUBE;app++) {
+        pj_launch_item row=app==PJ_APP_TV?PJ_ITEM_TV:app==PJ_APP_TUBE?PJ_ITEM_TUBE:PJ_ITEM_MEDIA;
+        memset(&f,0,sizeof(f));f.cart=f.alive=1;restarted=0;pj_launch_init(&l,0);
+        now=run(&l,&f,0,1200,&restarted);
+        for(unsigned k=0;k<(unsigned)row;k++){press(&l,&f,PJ_BTN_DOWN,now);now+=10;}
+        CHECK(l.selected==row);
+        press(&l,&f,row==PJ_ITEM_TV?PJ_BTN_START:PJ_BTN_A,now);CHECK(l.phase==PJ_L_MEDIA&&l.media_app==app&&l.selected==row);
+        CHECK(pj_radio_start_wanted(&l,1,0,0,0,0,0,0)); /* the saved Wi-Fi joins on their screen exactly as on Jellyfin's */
+        now=run(&l,&f,now+30,now+600000,&restarted);CHECK(l.phase==PJ_L_MEDIA&&!restarted&&f.open&&l.media_app==app);
+        physical_menu_forwarded(&l,&f,now);CHECK(l.phase==PJ_L_MEDIA); /* stock FPGA (menu_to_us 0): nothing */
+        l.menu_to_us=1;physical_menu_forwarded(&l,&f,now+5);CHECK(l.phase==PJ_L_MENU&&l.selected==row);l.menu_to_us=0;
+        press(&l,&f,PJ_BTN_A,now+10);CHECK(l.phase==PJ_L_MEDIA&&l.media_app==app);
+        press(&l,&f,PJ_BTN_B,now+20);CHECK(l.phase==PJ_L_MENU&&l.selected==row);
+        now=run(&l,&f,now+30,now+600000,&restarted);CHECK(!restarted&&l.phase==PJ_L_MENU); /* the menu waits */
+        press(&l,&f,PJ_BTN_B,now);now=run(&l,&f,now+10,now+3000,&restarted); /* B on the menu: Games, from every row */
+        CHECK(restarted&&!f.open&&l.done_reason==PJ_DONE_CLOSED&&l.close_reason==PJ_CLOSE_B_BUTTON);
+        /* the app owns the buttons while it runs: they reach it, the menu does not move, B is the app's */
+        memset(&f,0,sizeof(f));f.cart=f.alive=1;restarted=0;pj_launch_init(&l,0);
+        now=run(&l,&f,0,1200,&restarted);
+        for(unsigned k=0;k<(unsigned)row;k++){press(&l,&f,PJ_BTN_DOWN,now);now+=10;}
+        press(&l,&f,PJ_BTN_A,now);l.app_owns_media=1;l.app_pressed=0;
+        press(&l,&f,PJ_BTN_DOWN,now+10);press(&l,&f,PJ_BTN_B,now+20);
+        CHECK(l.phase==PJ_L_MEDIA&&l.selected==row&&l.app_pressed==(PJ_BTN_DOWN|PJ_BTN_B));
+        f.alive=0;now=run(&l,&f,now+30,now+10000,&restarted); /* a silent FPGA: stock, as from every screen */
+        CHECK(restarted&&l.done_reason==PJ_DONE_NO_FPGA_REPLY);
+    }
+    /* A on Games and A on Other firmware never touch media_app or the Media phase. */
+    memset(&f,0,sizeof(f));f.cart=f.alive=1;restarted=0;pj_launch_init(&l,0);
+    now=run(&l,&f,0,1200,&restarted);
+    press(&l,&f,PJ_BTN_UP,now);press(&l,&f,PJ_BTN_A,now+10);CHECK(l.phase==PJ_L_OTHER&&l.media_app==PJ_APP_JELLYFIN);
     /* A chord of A and a direction acts on what is highlighted, without moving first. */
     memset(&f,0,sizeof(f));f.cart=f.alive=1;restarted=0;pj_launch_init(&l,0);
     now=run(&l,&f,0,1200,&restarted);
@@ -411,7 +458,9 @@ static void text_fits(void) {
         "Starting Games...","Stock firmware did not","Connect USB and run","Wi-Fi: press A to check","Wi-Fi: listening...","A: check Wi-Fi   B: back",
         "Streaming: not built yet","Wi-Fi: check failed","Other firmware",
         "Wi-Fi dropped: rejoining...","Wi-Fi: rejoining...","Wi-Fi: connected","Wi-Fi: could not join","Closing Jellyfin...",
-        "Wi-Fi is back: opening Jellyfin","Joins Wi-Fi when Setup closes","Jellyfin: not enough memory","Wi-Fi: scanning...","Wi-Fi: settings busy, retrying",PJ_JOIN_RETRY_LINE};
+        "Wi-Fi is back: opening Jellyfin","Joins Wi-Fi when Setup closes","Jellyfin: not enough memory","Wi-Fi: scanning...","Wi-Fi: settings busy, retrying",PJ_JOIN_RETRY_LINE,
+        "Opening TV...","Opening ChromaTube...","Opening Local Weather...","Weather: not enough memory","TV: not enough memory",
+        "TV could not start","ChromaTube: not enough memory","ChromaTube could not start"}; /* 1.6.0 */
     for(unsigned i=0;i<sizeof(lines)/sizeof(lines[0]);i++)CHECK(12+pj_osd_measure(lines[i],pj_font_advance)<=156);
     for(unsigned i=0;i<sizeof(pj_credits_lines)/sizeof(pj_credits_lines[0]);i++)
         CHECK(8+pj_osd_measure(pj_credits_lines[i],pj_font_advance)<=156); /* Credits lines fit at x=8 */
@@ -561,6 +610,19 @@ int main(int argc,char **argv) {
     pj_launch_draw_menu(screen,&l,1500,pj_font_alpha,pj_font_advance);write_ppm(argv[1]);
     l.selected=PJ_ITEM_MEDIA;
     pj_launch_draw_menu(screen,&l,1500,pj_font_alpha,pj_font_advance);write_ppm(argv[2]);
+    {   /* 1.6.0: the other three rows focused, written next to the first ppm (no new argv) */
+        static const char *const names[3]={"ui-menu-tv.ppm","ui-menu-chromatube.ppm","ui-menu-other.ppm"};
+        const char *slash=argv[1];char mpath[512];
+        for(const char *p=argv[1];*p;p++)if(*p=='/'||*p=='\\')slash=p+1;
+        for(unsigned k=0;k<3;k++) {
+            l.selected=(pj_launch_item)(PJ_ITEM_TV+k);
+            pj_launch_draw_menu(screen,&l,1500,pj_font_alpha,pj_font_advance);
+            snprintf(mpath,sizeof(mpath),"%.*s%s",(int)(slash-argv[1]),argv[1],names[k]);write_ppm(mpath);
+        }
+        /* every row and its icon inside the screen, above the note line; rows do not overlap */
+        CHECK(PJ_MENU_TOP>=19&&PJ_MENU_PITCH>=19&&PJ_MENU_TOP+(int)(PJ_ITEM_COUNT-1)*PJ_MENU_PITCH+19<=121);
+        l.selected=PJ_ITEM_MEDIA;
+    }
     const char *const lines[3]={"Wi-Fi ok: 7 networks","Pairing: not available yet","Streaming: not built yet"};
     pj_launch_draw_media(screen,lines,pj_font_alpha,pj_font_advance);write_ppm(argv[3]);
     l.other_selected=1;l.other_note=1;
@@ -583,7 +645,7 @@ int main(int argc,char **argv) {
      {pj_plink_status s={PJ_PLV_SYNCING,7,19,"",0,0,0,0,{PJ_PLH_NOTHING,0,0,0}};char words[40];pj_plink_words(&s,words,sizeof(words));CHECK(!strcmp(words,"Syncing 7 of 19"));}
      static const char *const why[]={"FPGA did not enter link mode","fast UART not confirmed","FPGA status stale","link fault","link mode ended","x",NULL,
          "no reply from the FPGA bridge","FPGA status malformed","FPGA UART busy", /* 1.3.5: three more reasons */
-         "fast UART request not sent"}; /* 1.3.6: the request that never left the transmit ring */
+         "fast UART request not sent"}; /* 1.3.6 re-review: the request that never left the transmit ring */
      for(unsigned k=0;k<11;k++)CHECK(8+pj_osd_measure(pj_plink_why_words(why[k]),pj_font_advance)<=156&&
                                       8+pj_osd_measure(pj_plink_stage_words(why[k]),pj_font_advance)<=156);
      /* 1.3.5: a stopped link says the stage it failed in; distinct words for "no reply" and "refused"; a slow link

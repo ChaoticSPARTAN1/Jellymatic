@@ -12,14 +12,19 @@
  *     and still wins (a torn new sector fails its CRC and counts as empty).
  *  4. erase the old sector (its stale secret goes). A cut here leaves a torn old sector,
  *     which counts as empty, and the verified new one wins.
- * Only PJ_PROV_FLASH_A and PJ_PROV_FLASH_B, 4096 bytes each, are ever erased or written: the
- * device wrappers below refuse any other address or size before touching esp_flash. */
+ * Only PJ_PROV_FLASH_A and PJ_PROV_FLASH_B, 4096 bytes each, are ever erased or written by the setup
+ * commit, and (1.6.4) only PJ_APPS_FLASH_A and PJ_APPS_FLASH_B by the apps commit below: the device
+ * wrappers refuse any other address or size before touching esp_flash, and each commit checks that the
+ * sector it is about to erase is one of its own pair. */
 #include <stdlib.h>
 #include "provision_write.h"
 #include "provision_build.h"
 #define PJ_PW_SECTOR PJ_PROVISION_SECTOR
+_Static_assert(PJ_APPS_SECTOR==PJ_PROVISION_SECTOR,"one sector size");
+static int pj_pw_setup_sector(uint32_t offset){return offset==PJ_PROV_FLASH_A||offset==PJ_PROV_FLASH_B;}
+static int pj_pw_apps_sector(uint32_t offset){return offset==PJ_APPS_FLASH_A||offset==PJ_APPS_FLASH_B;}
 static int pj_pw_allowed(uint32_t offset,uint32_t size) {
-    return (offset==PJ_PROV_FLASH_A||offset==PJ_PROV_FLASH_B)&&size==PJ_PW_SECTOR;
+    return (pj_pw_setup_sector(offset)||pj_pw_apps_sector(offset))&&size==PJ_PW_SECTOR;
 }
 static int pj_pw_erased(const uint8_t *s){for(unsigned i=0;i<PJ_PW_SECTOR;i++)if(s[i]!=0xffu)return 0;return 1;}
 static int pj_pw_same_record(const pj_prov2 *a,const pj_prov2 *b) {
@@ -82,7 +87,7 @@ int pj_provision_commit_with(const pj_prov_flash *flash,const pj_prov_edit *edit
     if(have&&current.version==PJ_PROV2_VERSION&&pj_pw_same_record(&current,&next)){rc=PJ_PROV_WRITE_NO_CHANGE;goto out;}
     if(!pj_prov2_build(&next,image)){rc=PJ_PROV_WRITE_INVALID;goto out;}
     /* Step 3: the other sector. */
-    if(!pj_pw_allowed(new_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_INVALID;goto out;}
+    if(!pj_pw_setup_sector(new_at)||!pj_pw_allowed(new_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_INVALID;goto out;}
     if(flash->erase(flash->ctx,new_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_ERASE_FAILED;goto out;}
     if(flash->write(flash->ctx,new_at,image,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_WRITE_FAILED;goto out;}
     {
@@ -92,7 +97,7 @@ int pj_provision_commit_with(const pj_prov_flash *flash,const pj_prov_edit *edit
            pj_provision_any(back,PJ_PW_SECTOR,&check)!=1||check.sequence!=next.sequence){rc=PJ_PROV_WRITE_VERIFY_FAILED;goto out;}
         /* Step 4: the old copy goes, unless it was already empty. */
         if(!pj_pw_erased(other)) {
-            if(!pj_pw_allowed(old_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_INVALID;goto out;}
+            if(!pj_pw_setup_sector(old_at)||!pj_pw_allowed(old_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_INVALID;goto out;}
             if(flash->erase(flash->ctx,old_at,PJ_PW_SECTOR))rc=PJ_PROV_WRITE_ERASE_FAILED; /* new record already in force */
         }
     }
@@ -101,6 +106,34 @@ out:
     if(b){memset(b,0,PJ_PW_SECTOR);free(b);}
     if(image){memset(image,0,PJ_PW_SECTOR);free(image);}
     memset(&current,0,sizeof(current));memset(&next,0,sizeof(next));memset(&check,0,sizeof(check));
+    return rc;
+}
+/* 1.6.4: the apps record (apps_record.h), the same steps 1-3 on its own pair; step 4 is not needed (no secret). */
+int pj_apps_commit_with(const pj_prov_flash *flash,uint32_t flags) {
+    uint8_t *a=calloc(1,PJ_PW_SECTOR),*b=calloc(1,PJ_PW_SECTOR),*image=calloc(1,PJ_PW_SECTOR);
+    pj_apps current,check;int rc=PJ_PROV_WRITE_OK,in_b=0;
+    if(!a||!b||!image){rc=PJ_PROV_WRITE_NO_MEMORY;goto out;}
+    if(flags&~PJ_APPS_KNOWN){rc=PJ_PROV_WRITE_INVALID;goto out;}
+    /* Step 1: both copies; the one in force is the newer valid copy (apps_record.h, the boot rule). */
+    if(!flash||flash->read(flash->ctx,PJ_APPS_FLASH_A,a,PJ_PW_SECTOR)||flash->read(flash->ctx,PJ_APPS_FLASH_B,b,PJ_PW_SECTOR))
+        {rc=PJ_PROV_WRITE_READ_FAILED;goto out;}
+    int have=pj_apps_current(a,b,PJ_PW_SECTOR,&current,&in_b);
+    if(have&&current.flags==flags){rc=PJ_PROV_WRITE_NO_CHANGE;goto out;}
+    /* Step 2: the new record, newer than the copy in force; the copy NOT in force is the one replaced (none yet: A). */
+    uint32_t new_at=have&&!in_b?PJ_APPS_FLASH_B:PJ_APPS_FLASH_A,sequence=have?pj_apps_next_sequence(current.sequence):1u;
+    memset(image,0xff,PJ_PW_SECTOR);
+    if(!pj_apps_build(flags,sequence,image)){rc=PJ_PROV_WRITE_INVALID;goto out;}
+    /* Step 3: that sector only, then read back whole: in force only now. */
+    if(!pj_pw_apps_sector(new_at)||!pj_pw_allowed(new_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_INVALID;goto out;}
+    if(flash->erase(flash->ctx,new_at,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_ERASE_FAILED;goto out;}
+    if(flash->write(flash->ctx,new_at,image,PJ_PW_SECTOR)){rc=PJ_PROV_WRITE_WRITE_FAILED;goto out;}
+    {
+        uint8_t *back=new_at==PJ_APPS_FLASH_A?a:b;
+        if(flash->read(flash->ctx,new_at,back,PJ_PW_SECTOR)||memcmp(back,image,PJ_PW_SECTOR)||
+           !pj_apps_current(a,b,PJ_PW_SECTOR,&check,NULL)||check.flags!=flags||check.sequence!=sequence)rc=PJ_PROV_WRITE_VERIFY_FAILED;
+    }
+out:
+    free(a);free(b);free(image);
     return rc;
 }
 #ifdef ESP_PLATFORM
@@ -118,7 +151,7 @@ out:
 typedef struct {esp_flash_os_functions_t os;esp_flash_t chip;} pj_pw_device;
 static IRAM_ATTR esp_err_t pj_pw_region(void *arg,size_t start,size_t size) {
     (void)arg;
-    return ((start==PJ_PROV_FLASH_A||start==PJ_PROV_FLASH_B)&&size==PJ_PW_SECTOR)?ESP_OK:ESP_ERR_NOT_SUPPORTED;
+    return ((start==PJ_PROV_FLASH_A||start==PJ_PROV_FLASH_B||start==PJ_APPS_FLASH_A||start==PJ_APPS_FLASH_B)&&size==PJ_PW_SECTOR)?ESP_OK:ESP_ERR_NOT_SUPPORTED;
 }
 /* The only three esp_flash calls that may touch these sectors; the address check comes first. */
 static int pj_pw_dev_read(void *ctx,uint32_t offset,void *out,uint32_t size) {
@@ -132,7 +165,8 @@ static int pj_pw_dev_write(void *ctx,uint32_t offset,const void *data,uint32_t s
     if(!ctx)return -1;
     (void)ctx;if(!pj_pw_allowed(offset,size))return -1;return esp_flash_write(&((pj_pw_device*)ctx)->chip,data,offset,size)==ESP_OK?0:-1;
 }
-int pj_provision_commit(const pj_prov_edit *edit) {
+/* One commit through the narrowed stack chip copy: the setup record's (edit) or, 1.6.4, the apps record's (apps). */
+static int pj_pw_run(const pj_prov_edit *edit,const uint32_t *apps) {
     pj_pw_device device;
     if(!esp_flash_default_chip||!esp_flash_default_chip->os_func||!esp_flash_default_chip->chip_drv)return PJ_PROV_WRITE_READ_FAILED; /* nothing written */
     device.os=*esp_flash_default_chip->os_func;
@@ -140,6 +174,8 @@ int pj_provision_commit(const pj_prov_edit *edit) {
     device.chip=*esp_flash_default_chip;
     device.chip.os_func=&device.os;
     const pj_prov_flash dev={&device,pj_pw_dev_read,pj_pw_dev_erase,pj_pw_dev_write};
-    return pj_provision_commit_with(&dev,edit);
+    return edit?pj_provision_commit_with(&dev,edit):apps?pj_apps_commit_with(&dev,*apps):PJ_PROV_WRITE_INVALID;
 }
+int pj_provision_commit(const pj_prov_edit *edit){return edit?pj_pw_run(edit,NULL):PJ_PROV_WRITE_INVALID;}
+int pj_apps_commit(uint32_t flags){return pj_pw_run(NULL,&flags);}
 #endif

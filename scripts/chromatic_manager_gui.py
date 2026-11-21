@@ -49,7 +49,7 @@ import time
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QFontMetrics, QPainter, QPen
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                                QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy, QStackedWidget, QStyle,
                                QStyleOptionButton, QToolTip, QVBoxLayout, QWidget)
 
@@ -1867,6 +1867,1015 @@ class JellyfinDialog(QDialog):
         super().reject()
 
 
+class WeatherDialog(QDialog):
+    """Settings > Weather location (launcher 1.6.3+): the place the console's Local Weather channel
+    shows. Type a US ZIP code or "City, ST"; Find looks it up on this PC (the bundled Census table,
+    nothing sent); picking a match asks api.weather.gov for its forecast office, time zone and nearest
+    stations (the only service the place goes to) and shows them to confirm. Save and write keeps it
+    in this PC's private file and starts the console write (its own Approve); Use default goes back to
+    Orlando, FL (the compiled-in place of start-up menu 1.6.4+). The place shows masked while private details are hidden, and is never logged.
+    `choice`: 'write' (with `place`) or 'default' when the owner chose one, else None. Nothing is
+    saved here: after the Approve the window hands the choice to the 'weather' job, which saves it
+    on this PC only once the console verifiably holds it."""
+
+    def __init__(self, parent, finder=None, resolver=None, loader=None, launcher=None, maker=None, previewer=None,
+                 pick_file=None, save_file=None, first=False):
+        super().__init__(parent)
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        self.wl, self.lp = wl, lp
+        # 1.6.5: the area pages (a location pack): made here (make_location_pack.make), previewed with the console's own
+        # drawing (chromatic_weather_preview.pages), imported from / exported to a file. `first`: asked at a first
+        # install (nothing is written by this page then; the install writes the choice).
+        self.maker = maker
+        self.previewer = previewer
+        self.pick_file, self.save_file = pick_file, save_file
+        self.first = first
+        self.pack = None
+        self.launcher = launcher  # the console's launcher at the last check: which place its default is
+        self.finder, self.resolver = finder or wl.find, resolver or wl.resolve
+        self.loader = loader or (lambda: wl.load_saved(__import__('chromatic_manager').LOCATION_FILE))
+        self.choice, self.place, self.busy, self.found = None, None, False, []
+        try:
+            self.saved = self.loader()
+        except Exception:
+            self.saved = None
+        self._bridge = _Done(self)
+        self._bridge.done.connect(self._finished)
+        self.setWindowTitle('Weather location')
+        self.setModal(True)
+        fit_dialog(self, parent, 600)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 18, 22, 16)
+        layout.setSpacing(8)
+        small = theme.GEOMETRY['small_point_size']
+        top = QHBoxLayout()
+        top.addWidget(label('WEATHER LOCATION', 'info', wrap=False, size=theme.GEOMETRY['base_point_size'] + 3, bold=True))
+        top.addStretch(1)
+        self.eye = privacy_button(self._toggle_privacy)
+        top.addWidget(self.eye)
+        layout.addLayout(top)
+        layout.addWidget(label('The place your Chromatic\'s Local Weather channel shows (start-up menu 1.6.3 or newer). '
+                               'It stays on this PC and the console, and is sent only to the US weather service '
+                               '(api.weather.gov).', 'dim', size=small))
+        self.now = label('', 'value', size=small)
+        layout.addWidget(self.now)
+        row = QHBoxLayout()
+        self.query = QLineEdit()
+        self.query.setPlaceholderText('ZIP code, or City, ST')
+        self.query.setToolTip('A US ZIP code (80202) or a town and its state (Denver, CO).')
+        self.query.setFont(theme.body_font(theme.GEOMETRY['base_point_size']))
+        self.query.returnPressed.connect(self.find_now)
+        self.find = button('Find', 'go', size=small)
+        self.find.setFixedHeight(28)
+        self.find.setToolTip('Looks the place up on this PC. Nothing is sent anywhere.')
+        self.find.clicked.connect(self.find_now)
+        row.addWidget(self.query, 1)
+        row.addWidget(self.find)
+        layout.addLayout(row)
+        self.found_box = QGridLayout()
+        self.found_box.setHorizontalSpacing(6)
+        self.found_box.setVerticalSpacing(4)
+        layout.addLayout(self.found_box)
+        self.details = label('', 'value', size=small)
+        self.details.hide()
+        layout.addWidget(self.details)
+        self.note = label('', 'notice', size=small + 0.5, bold=True)
+        self.note.hide()
+        layout.addWidget(self.note)
+        pages = QHBoxLayout()
+        self.make_pages = button('Make the area pages', 'go', size=small)
+        self.make_pages.setToolTip('Makes this place\'s state map, area close-up and radar view (about 15 requests to the '
+                                   'US weather service) and shows every weather page as the console will draw it. '
+                                   'Shown on start-up menu 1.6.5 or newer.')
+        self.make_pages.clicked.connect(self.make_now)
+        self.import_pages = button('Import pages...', '', size=small)
+        self.import_pages.setToolTip('Uses area pages saved as a file (made here or with make_location_pack.py) for '
+                                     'the place you chose; they are checked exactly as the console checks them.')
+        self.import_pages.clicked.connect(self.import_now)
+        self.export_pages = button('Export pages...', '', size=small)
+        self.export_pages.setToolTip('Saves these area pages as a file (they name your place: share it only if you want).')
+        self.export_pages.clicked.connect(self.export_now)
+        for widget in (self.make_pages, self.import_pages, self.export_pages):
+            widget.setFixedHeight(26)
+            widget.setAutoDefault(False)
+            widget.setEnabled(False)
+            pages.addWidget(widget)
+        pages.addStretch(1)
+        layout.addLayout(pages)
+        self.preview = QLabel()
+        self.preview.hide()
+        layout.addWidget(self.preview)
+        buttons = QHBoxLayout()
+        self.default = button('Use default (Orlando, FL)', '')
+        self.default.setToolTip('Puts the console back to its built-in place, Orlando, FL (start-up menu 1.6.4 or newer): its '
+                                'weather location is erased (asks for your Approve).')
+        self.default.clicked.connect(self._use_default)
+        buttons.addWidget(self.default)
+        buttons.addStretch(1)
+        self.close_button = button('Close', 'no')
+        self.close_button.setToolTip('Closes this page. Nothing is saved or written.')
+        self.close_button.clicked.connect(self.reject)
+        self.write = button('Save and write to console', 'yes')
+        self.write.setToolTip('Saves this place on this PC (private file) and writes it to your Chromatic (asks for '
+                              'your Approve; about 1 minute with the console plugged in).')
+        self.write.clicked.connect(self._write)
+        self.write.setEnabled(False)
+        for widget in (self.default, self.close_button, self.write):
+            widget.setFixedHeight(34)
+            widget.setAutoDefault(False)
+            widget.setDefault(False)
+            if widget is not self.default:
+                buttons.addWidget(widget)
+        layout.addLayout(buttons)
+        self._apply_privacy()
+        self._show_now()
+        centre_on(self, parent)
+
+    def _apply_privacy(self):
+        # what is typed shows only while private details are showing (or while it is typed)
+        self.query.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit if Privacy.on else QLineEdit.EchoMode.Normal)
+
+    def _show_now(self):
+        self.now.setText('Now: ' + (shown_name(self.saved.name) + ' (saved on this PC)' if self.saved else
+                                    self.wl.default_name(self.launcher) + ' (default)'))
+
+    def _toggle_privacy(self):
+        toggle_privacy(self)
+        self.eye.setChecked(Privacy.on)
+        self.eye.setToolTip(PRIVACY_TIP_ON if Privacy.on else PRIVACY_TIP_OFF)
+        self._apply_privacy()
+        self._show_now()
+        self._show_found()
+        if self.place is not None:
+            self._show_place()
+        if self.pack is not None and hasattr(self, 'preview_shots'):
+            self.preview.setVisible(not Privacy.on)
+
+    def _say(self, tone, text):
+        self.note.setProperty('role', {'ok': 'ok', 'error': 'error'}.get(tone, 'notice'))
+        self.note.setText(text)
+        self.note.setVisible(bool(text))
+        restyle(self.note)
+
+    def _set_busy(self, busy, what=''):
+        self.busy = busy
+        for widget in (self.find, self.query, self.default, self.write):
+            widget.setEnabled(not busy and (widget is not self.write or self.place is not None))
+        self._pages_buttons()
+        if busy:
+            self._say('info', what)
+
+    def _pages_buttons(self):
+        have = self.place is not None and not self.busy
+        self.make_pages.setEnabled(have and self.maker is not None)
+        self.import_pages.setEnabled(have)
+        self.export_pages.setEnabled(have and self.pack is not None)
+
+    def _finished(self, payload):
+        then, out = payload
+        self._set_busy(False)
+        then(out)
+
+    def find_now(self):
+        self.place = None
+        self.pack = None
+        self.preview.hide()
+        self.details.hide()
+        self.write.setEnabled(False)
+        self._pages_buttons()
+        try:
+            found = list(self.finder(self.query.text()))
+        except Exception:
+            found = []
+        self.found = found[:6]
+        try:  # only six fit: say so, with a real place that was left out as the example
+            more = (self.wl.more_hint(self.query.text(), 6) if self.finder is self.wl.find else
+                    'More places match: add the state.' if len(found) > 6 else '')
+        except Exception:
+            more = ''
+        self._show_found()
+        if not self.found:
+            self._say('error', 'No US place matched. Type a ZIP code (80202) or a town and its state (Denver, CO).')
+        else:
+            self._say('info', 'Press the place you mean.' + (f' {more}' if more else ''))
+
+    def _show_found(self):
+        while self.found_box.count():
+            item = self.found_box.takeAt(0)
+            if item.widget() is not None:
+                item.widget().hide()
+                item.widget().deleteLater()
+        for n, found in enumerate(self.found):
+            pick = button(shown_name(found.name), 'go', size=theme.GEOMETRY['small_point_size'])
+            pick.setFixedHeight(26)
+            pick.setToolTip('Uses this place: asks the US weather service for its forecast area and stations.')
+            pick.clicked.connect(lambda _=False, f=found: self.pick(f))
+            self.found_box.addWidget(pick, n // 3, n % 3)
+
+    def pick(self, found):
+        self._set_busy(True, 'Asking the US weather service... (a few seconds)')
+
+        def body():
+            try:
+                out = self.resolver(found)
+            except Exception as error:  # plain words only
+                out = error
+            self._bridge.done.emit((self._resolved, out))
+        threading.Thread(target=body, name='chromatic-weather-page', daemon=True).start()
+
+    def _resolved(self, out):
+        if isinstance(out, Exception):
+            self.place = None
+            self._say('error', str(out) if isinstance(out, self.wl.LocationError) else
+                      'The weather service did not answer. Check this PC\'s internet connection and try again.')
+            self.write.setEnabled(False)
+            return
+        self.place = out
+        self.pack = None
+        self.preview.hide()
+        self._show_place()
+        self.write.setEnabled(True)
+        self._pages_buttons()
+        self._say('ok', 'Check the place and its stations, then press Save and write to console (or first Make the '
+                        'area pages for its maps and radar).')
+
+    # ---- 1.6.5: the area pages ----
+    def make_now(self):
+        if self.place is None or self.maker is None or self.busy:
+            return
+        self._set_busy(True, 'Making the area pages: asking the US weather service about nearby towns... (about a minute)')
+        place = self.place
+
+        def body():
+            try:
+                out = self.maker(place)
+            except Exception as error:  # plain words only
+                out = error
+            self._bridge.done.emit((self._made, out))
+        threading.Thread(target=body, name='chromatic-weather-pages', daemon=True).start()
+
+    def _made(self, out):
+        if isinstance(out, Exception):
+            self.pack = None
+            self._say('error', 'The area pages could not be made (' + str(out) + '). The place can be written without them.')
+            self._pages_buttons()
+            return
+        self._use_pack(out, 'Area pages made: every page is shown below as the console will draw it.')
+
+    def _use_pack(self, pack, words):
+        self.pack = pack
+        self._pages_buttons()
+        self._show_place()
+        self._say('ok', words + ' ' + ' '.join(self.lp.describe(pack)[1:]))
+        self._show_preview()
+
+    def _show_preview(self):
+        if self.previewer is None or self.pack is None:
+            return
+        try:
+            shots = self.previewer(self.place, self.pack)
+        except Exception:
+            self._say('info', 'The pages are made; their preview is not available on this PC.')
+            return
+        from PySide6.QtGui import QImage, QPainter, QPixmap
+        cols = 4
+        rows = (len(shots) + cols - 1) // cols
+        sheet = QImage(cols * 162, rows * 146, QImage.Format.Format_RGB16)
+        sheet.fill(0)
+        painter = QPainter(sheet)
+        for n, (_, data) in enumerate(shots):
+            page = QImage(data, 160, 144, 320, QImage.Format.Format_RGB16)
+            painter.drawImage((n % cols) * 162 + 1, (n // cols) * 146 + 1, page)
+        painter.end()
+        self.preview_shots = shots
+        self.preview.setPixmap(QPixmap.fromImage(sheet).scaledToWidth(560))
+        self.preview.setVisible(not Privacy.on)   # the pages name the place: shown with private details only
+        if Privacy.on:
+            self._say('ok', 'Area pages made. Show private details (the eye) to see every page.')
+        self.adjustSize()
+
+    def import_now(self):
+        if self.place is None or self.busy:
+            return
+        path = self.pick_file() if self.pick_file else QFileDialog.getOpenFileName(self, 'Import area pages', '',
+                                                                                    'Location packs (*.pjlp)')[0]
+        if not path:
+            return
+        try:
+            pack = self.lp.load_file(path)
+        except self.lp.PackError as error:
+            self._say('error', str(error))
+            return
+        if not pack.binds(self.place):
+            self._say('error', 'Those area pages were made for another place. Choose that place, or make new pages.')
+            return
+        self._use_pack(pack, 'Area pages imported and checked.')
+
+    def export_now(self):
+        if self.pack is None:
+            return
+        path = self.save_file() if self.save_file else QFileDialog.getSaveFileName(self, 'Export area pages', 'area-pages.pjlp',
+                                                                                    'Location packs (*.pjlp)')[0]
+        if not path:
+            return
+        try:
+            self.lp.save_file(self.pack, path)
+        except (self.lp.PackError, OSError) as error:
+            self._say('error', f'Not saved: {error}')
+            return
+        self._say('ok', 'Area pages saved as a file.')
+
+    def _show_place(self):
+        lines = self.wl.describe(self.place, self.pack)
+        stations = 'Stations: ' + ', '.join(shown_name(s.label) for s in self.place.stations)
+        self.details.setText('\n'.join([shown_name(lines[0]), lines[1], stations, lines[3]]))
+        self.details.show()
+
+    def _write(self):
+        if self.place is None or self.busy:
+            return
+        self.choice = 'write'
+        self.accept()
+
+    def _use_default(self):
+        if self.busy:
+            return
+        self.choice, self.place = 'default', None
+        self.accept()
+
+    def reject(self):
+        if self.busy:
+            return  # the weather service is being asked: it ends by itself within seconds
+        super().reject()
+
+
+class AppsDialog(QDialog):
+    """Settings > Apps (launcher 1.6.4+): which optional apps the console's start-up menu shows. TV (with the built-in
+    Local Weather channel only, or also the Jellyfin server's Live TV channels) and ChromaTube, each on or off; Games,
+    Jellyfin and Other firmware always stay. `choice`: 'write' (with `flags`) or 'default', else None. Nothing is saved
+    here: after the Approve the window hands the choice to the 'apps' job, which saves it on this PC once the console
+    holds it."""
+
+    def __init__(self, parent, flags, where):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QRadioButton
+        import chromatic_apps as ap
+        self.ap, self.choice, self.flags = ap, None, flags
+        self.setWindowTitle('Apps')
+        self.setModal(True)
+        fit_dialog(self, parent, 600)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 18, 22, 16)
+        layout.setSpacing(8)
+        small = theme.GEOMETRY['small_point_size']
+        layout.addWidget(label('APPS ON THE START-UP MENU', 'info', wrap=False, size=theme.GEOMETRY['base_point_size'] + 3, bold=True))
+        layout.addWidget(label('Which apps your Chromatic\'s start-up menu shows (start-up menu 1.6.4 or newer). Games, '
+                               'Jellyfin and Other firmware are always there; Games stays first.', 'dim', size=small))
+        self.now = label(f'Now: {ap.words(flags)} ({where}).', 'value', size=small)
+        layout.addWidget(self.now)
+        self.tv = QCheckBox('TV')
+        self.tv.setToolTip('The TV row. Its built-in Local Weather channel needs only Wi-Fi.')
+        self.weather_only = QRadioButton('Local Weather only (no server needed)')
+        self.with_livetv = QRadioButton('Local Weather and your Jellyfin server\'s Live TV channels')
+        self.with_livetv.setToolTip('Only when your server has Live TV channels (Live TV channels, below, can add them).')
+        self.tube = QCheckBox('ChromaTube (needs the ChromaTube library on your Jellyfin server)')
+        for widget in (self.tv, self.weather_only, self.with_livetv, self.tube):
+            widget.setFont(theme.body_font(theme.GEOMETRY['base_point_size']))
+        self.tv.setChecked(bool(flags & ap.TV))
+        (self.with_livetv if flags & ap.LIVETV else self.weather_only).setChecked(True)
+        self.tube.setChecked(bool(flags & ap.TUBE))
+        self.tv.toggled.connect(self._follow)
+        layout.addWidget(self.tv)
+        for widget in (self.weather_only, self.with_livetv):
+            row = QHBoxLayout()
+            row.addSpacing(26)
+            row.addWidget(widget, 1)
+            layout.addLayout(row)
+        layout.addWidget(self.tube)
+        layout.addWidget(label('On the console itself: focus TV or ChromaTube on the start-up menu and press Select to hide '
+                               'it; Other firmware > Show hidden apps brings hidden apps back.', 'notice', size=small))
+        buttons = QHBoxLayout()
+        self.default = button('Use defaults', '')
+        self.default.setToolTip('TV with Local Weather only, ChromaTube off: the console\'s apps choice is erased (asks for '
+                                'your Approve).')
+        self.default.clicked.connect(self._use_default)
+        buttons.addWidget(self.default)
+        buttons.addStretch(1)
+        self.close_button = button('Close', 'no')
+        self.close_button.setToolTip('Closes this page. Nothing is saved or written.')
+        self.close_button.clicked.connect(self.reject)
+        self.write = button('Save and write to console', 'yes')
+        self.write.setToolTip('Writes this choice to your Chromatic (asks for your Approve; about 1 minute with the console '
+                              'plugged in) and keeps a copy on this PC.')
+        self.write.clicked.connect(self._write)
+        for widget in (self.default, self.close_button, self.write):
+            widget.setFixedHeight(34)
+            widget.setAutoDefault(False)
+            if widget is not self.default:
+                buttons.addWidget(widget)
+        layout.addLayout(buttons)
+        self._follow()
+        centre_on(self, parent)
+
+    def _follow(self):
+        for widget in (self.weather_only, self.with_livetv):
+            widget.setEnabled(self.tv.isChecked())
+
+    def chosen(self):
+        ap = self.ap
+        return ((ap.TV if self.tv.isChecked() else 0) | (ap.TUBE if self.tube.isChecked() else 0)
+                | (ap.LIVETV if self.with_livetv.isChecked() else 0))
+
+    def _write(self):
+        self.choice, self.flags = 'write', self.chosen()
+        self.accept()
+
+    def _use_default(self):
+        self.choice, self.flags = 'default', None
+        self.accept()
+
+
+class ServerSetupDialog(QDialog):
+    """The optional server setups' common part (chromatic_server_apps): an administrator sign-in for each job (the PC's
+    saved one only when the owner ticks it for this job, else one typed now, kept in memory only and signed out at the end
+    of each job), the job's plain lines, and work on a thread so the window keeps drawing. `options` (tests): 'session'
+    (mode, url, user, password) -> Session, 'saved_available' bool, 'fetch', 'choose_folder', 'answers' (host check)."""
+
+    TITLE = ''
+
+    def __init__(self, parent, options=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QRadioButton
+        import chromatic_server_apps as sa
+        self.sa, self.options, self.busy, self.results = sa, dict(options or {}), False, []
+        self._bridge = _Done(self)
+        self._bridge.done.connect(self._finished)
+        self.setWindowTitle(self.TITLE)
+        self.setModal(True)
+        fit_dialog(self, parent, 680)
+        self.layout_ = QVBoxLayout(self)
+        self.layout_.setContentsMargins(22, 16, 22, 14)
+        self.layout_.setSpacing(7)
+        self.small = theme.GEOMETRY['small_point_size']
+        top = QHBoxLayout()
+        top.addWidget(label(self.TITLE.upper(), 'info', wrap=False, size=theme.GEOMETRY['base_point_size'] + 3, bold=True))
+        top.addStretch(1)
+        self.eye = privacy_button(self._toggle_privacy)
+        top.addWidget(self.eye)
+        self.layout_.addLayout(top)
+        # The page's own part scrolls when the screen is too short for all of it (Qt keeps a window within about two
+        # thirds of the screen's height), so its rows never squeeze into each other; the sign-in, the note, the job's
+        # lines and the buttons below stay in view.
+        from PySide6.QtWidgets import QScrollArea
+        inner = QWidget()
+        self.body = QVBoxLayout(inner)
+        self.body.setContentsMargins(0, 0, 6, 0)
+        self.body.setSpacing(7)
+        self.scroll = QScrollArea()
+        self.scroll.setWidget(inner)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setMinimumHeight(120)
+        self.layout_.addWidget(self.scroll, 1)
+        # the sign-in for each job
+        saved = self.options.get('saved_available')
+        if saved is None:
+            saved = __import__('chromatic_manager').jellyfin_settings_available()
+        self.use_saved = QRadioButton('Use the Jellyfin sign-in saved on this PC for this job (it must be an administrator)')
+        self.use_typed = QRadioButton('Sign in as an administrator for this job only (kept in memory, signed out at the end)')
+        self.use_saved.setEnabled(bool(saved))
+        (self.use_saved if saved else self.use_typed).setChecked(True)
+        self.address, self.user, self.password = QLineEdit(), QLineEdit(), QLineEdit()
+        self.address.setPlaceholderText('Server address, for example http://192.168.1.20:8096')
+        self.user.setPlaceholderText('Administrator user name')
+        self.password.setPlaceholderText('Password (hidden; never saved)')
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.sign_in_box = QVBoxLayout()
+        for widget in (self.use_saved, self.use_typed):
+            widget.setFont(theme.body_font(self.small))
+            self.sign_in_box.addWidget(widget)
+        typed = QHBoxLayout()
+        for widget in (self.address, self.user, self.password):
+            widget.setFont(theme.body_font(self.small))
+            typed.addWidget(widget, 2 if widget is self.address else 1)
+        self.sign_in_box.addLayout(typed)
+        self.use_typed.toggled.connect(self._follow_sign_in)
+        self.lines = QPlainTextEdit()
+        self.lines.setReadOnly(True)
+        self.lines.setMinimumHeight(64)
+        self.lines.setMaximumHeight(110)  # it scrolls; the page's own part above gets the room
+        self.lines.setFont(theme.body_font(self.small))
+        self.note = label('', 'notice', size=self.small + 0.5, bold=True)
+        self.note.hide()
+        self.actions = QHBoxLayout()
+        self.close_button = button('Close', 'no')
+        self.close_button.clicked.connect(self.reject)
+        self._follow_sign_in()
+
+    def finish_layout(self):
+        self.layout_.addWidget(label('SIGN-IN FOR EACH JOB', 'value', size=self.small + 0.5, bold=True))
+        self.layout_.addLayout(self.sign_in_box)
+        self.layout_.addWidget(self.note)
+        self.layout_.addWidget(self.lines)
+        self.actions.addStretch(1)
+        self.close_button.setFixedHeight(32)
+        self.actions.addWidget(self.close_button)
+        self.layout_.addLayout(self.actions)
+        self._apply_privacy()
+        centre_on(self, self.parent())
+
+    def action_button(self, text, kind, tip, slot):
+        widget = button(text, kind, size=self.small + 0.5)
+        widget.setFixedHeight(32)
+        widget.setToolTip(tip)
+        widget.setAutoDefault(False)
+        widget.clicked.connect(slot)
+        self.actions.addWidget(widget)
+        return widget
+
+    def _follow_sign_in(self):
+        typed = self.use_typed.isChecked()
+        for widget in (self.address, self.user, self.password):
+            widget.setEnabled(typed)
+
+    def _apply_privacy(self):
+        self.address.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit if Privacy.on else QLineEdit.EchoMode.Normal)
+
+    def _toggle_privacy(self):
+        toggle_privacy(self)
+        self.eye.setChecked(Privacy.on)
+        self._apply_privacy()
+
+    def say(self, tone, text):
+        self.note.setProperty('role', {'ok': 'ok', 'error': 'error'}.get(tone, 'notice'))
+        self.note.setText(text)
+        self.note.setVisible(bool(text))
+        restyle(self.note)
+
+    def session(self):
+        """A session for one job, or SetupError. Its own temporary sign-in is signed out by run()."""
+        make = self.options.get('session')
+        if self.use_saved.isChecked():
+            if make:
+                return make('saved', None, None, None)
+            session, why = self.sa.saved_session()
+            if session is None:
+                raise self.sa.SetupError(why)
+            return session
+        url, user, password = self.address.text().strip(), self.user.text().strip(), self.password.text()
+        if make:
+            return make('typed', url, user, password)
+        return self.sa.typed_session(url, user, password)
+
+    def run(self, busy_text, work, then):
+        """`work(session, out)` on a thread with a fresh session; `then(result)` back on the window's thread."""
+        if self.busy:
+            return
+        self.busy = True
+        self.set_enabled(False)
+        self.say('info', busy_text)
+        self.lines.clear()
+        lines = []
+
+        def out(line):
+            lines.append(str(line))
+
+        def body():
+            session, result = None, None
+            try:
+                session = self.session()
+                if not session.admin:
+                    raise self.sa.SetupError('That sign-in is not a Jellyfin administrator; nothing was changed.')
+                result = work(session, out)
+            except self.sa.SetupError as error:
+                result = error
+            except Exception as error:  # plain words only: never server data
+                result = self.sa.SetupError(f'Stopped ({type(error).__name__}); nothing further was sent.')
+            finally:
+                if session is not None:
+                    session.close()  # this job's own temporary sign-in only
+            self._bridge.done.emit((then, (result, lines)))
+        threading.Thread(target=body, name='chromatic-server-setup', daemon=True).start()
+
+    def _finished(self, payload):
+        then, (result, lines) = payload
+        self.busy = False
+        self.set_enabled(True)
+        self.lines.setPlainText(shown('\n'.join(lines)))
+        if isinstance(result, self.sa.SetupError):
+            self.say('error', str(result))
+            return
+        self.say('info', '')
+        then(result)
+
+    def set_enabled(self, on):
+        for index in range(self.actions.count()):
+            widget = self.actions.itemAt(index).widget()
+            if widget is not None and widget is not self.close_button:
+                widget.setEnabled(on)
+        self.close_button.setEnabled(on)
+
+    def approve(self, text, headline):
+        dialogs = getattr(self.parent(), 'dialogs', None)
+        if dialogs is None or not hasattr(dialogs, 'approve'):
+            return False
+        return dialogs.approve(text, 'Approve', headline)
+
+    def reject(self):
+        if self.busy:
+            return  # a server job is running: it ends by itself
+        super().reject()
+
+
+class LiveTvDialog(ServerSetupDialog):
+    """Settings > Live TV channels (optional): one tuner on the owner's Jellyfin server for the TV app's channel list,
+    from iptv-org's public lists (English cartoons, US weather, US news, classic TV; never pay-TV re-streams). Dry run
+    first, Add and Remove each with their own Approve. The console is never touched here (Apps turns the list on)."""
+
+    TITLE = 'Live TV channels'
+
+    def __init__(self, parent, options=None):
+        super().__init__(parent, options)
+        self.plan = None
+        self.body.addWidget(label('Optional. Adds ONE tuner to your Jellyfin server so TV lists its channels, read from '
+                                  'iptv-org\'s public lists (links to publicly available streams only; pay-TV re-streams '
+                                  'are never offered). Backup first, dry run first, add-only; Remove undoes it. Games, '
+                                  'Jellyfin and Local Weather never need it.', 'dim', size=self.small))
+        self.groups = []
+        grid = QGridLayout()
+        for n, group in enumerate(self.sa.GROUPS):
+            box = QCheckBox(group.label)
+            box.setChecked(True)
+            box.setFont(theme.body_font(self.small + 0.5))
+            grid.addWidget(box, n // 2, n % 2)
+            self.groups.append((group.key, box))
+        self.body.addLayout(grid)
+        row = QHBoxLayout()
+        self.folder = QLineEdit()
+        self.folder.setPlaceholderText('Folder on this PC that holds your Jellyfin library folders (a network share)')
+        self.folder.setFont(theme.body_font(self.small))
+        choose = button('Choose...', '', size=self.small)
+        choose.setFixedHeight(28)
+        choose.clicked.connect(self._choose)
+        row.addWidget(self.folder, 1)
+        row.addWidget(choose)
+        self.body.addLayout(row)
+        self.body.addWidget(label('The list file goes into a new folder "ChromaticTV" inside one of your library folders on '
+                                  'that share (a movies library is preferred: it ignores a folder with no video). The '
+                                  'server must list it before the tuner is added.', 'dim', size=self.small))
+        self.dry = self.action_button('Dry run', 'go', 'Reads only: shows exactly what Add would do. Nothing changes.',
+                                      self.dry_run)
+        self.add = self.action_button('Add', 'yes', 'Adds the tuner after your Approve (needs a dry run first).', self.add_now)
+        self.remove = self.action_button('Remove', 'stop', 'Deletes exactly the tuner this PC recorded and its list file, '
+                                         'after your Approve, and compares with the backup.', self.remove_now)
+        self.add.setEnabled(False)
+        self.finish_layout()
+
+    def _apply_privacy(self):
+        super()._apply_privacy()
+        if hasattr(self, 'folder'):  # a path on this PC names its user: masked like the other private details
+            self.folder.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit if Privacy.on else QLineEdit.EchoMode.Normal)
+
+    def _choose(self):
+        choose = self.options.get('choose_folder')
+        if choose is None:
+            from PySide6.QtWidgets import QFileDialog
+            choose = lambda: QFileDialog.getExistingDirectory(self, 'Folder that holds your Jellyfin library folders')
+        folder = choose()
+        if folder:
+            self.folder.setText(str(folder))
+
+    def keys(self):
+        return [key for key, box in self.groups if box.isChecked()]
+
+    def dry_run(self):
+        keys, base = self.keys(), self.folder.text().strip().strip('"')
+        fetch = self.options.get('fetch', self.sa.fetch_url)
+        self.plan = None
+        self.add.setEnabled(False)
+
+        def work(session, out):
+            return self.sa.livetv_plan(session, keys, Path(base) if base else None, fetch)
+
+        def then(plan):
+            self.plan = plan
+            self.lines.setPlainText(plan.text())
+            self.say('ok' if plan.ready else 'error', 'Ready: press Add to make these changes.' if plan.ready else
+                     'Not ready: see the lines below. Nothing was changed.')
+            self.add.setEnabled(plan.ready)
+        self.run('Reading your server (nothing changes)...', work, then)
+
+    def add_now(self):
+        plan = self.plan
+        if plan is None or not plan.ready:
+            return
+        text = ('This changes your Jellyfin server:\n' + plan.text().replace('Dry run: nothing has been sent that changes '
+                'the server.\n', '') + '\nSide effects: the channels also appear under Live TV in your other Jellyfin apps; '
+                'each watched channel is a conversion on the server.')
+        if not self.approve(text, 'Add Live TV channels to your Jellyfin server?'):
+            self.say('info', 'Not approved. Nothing was changed.')
+            return
+        self.add.setEnabled(False)
+        wait, sleep = self.options.get('wait', 300), self.options.get('sleep', time.sleep)
+
+        def work(session, out):
+            return self.sa.livetv_add(session, plan, out, sleep=sleep, wait=wait)
+
+        def then(ok):
+            self.results.append(('add', ok))
+            self.plan = None
+            self.add.setEnabled(False)
+            self.say('ok' if ok else 'error', 'Added. Now open Apps and choose "Local Weather and your Jellyfin server\'s Live '
+                     'TV channels" so the console lists them.' if ok else 'Not added cleanly: see the lines below.')
+        self.run('Adding the tuner (it may take a few minutes until the server lists the channels)...', work, then)
+
+    def remove_now(self):
+        if not self.approve('This changes your Jellyfin server: it deletes exactly the Live TV tuner this PC recorded (and '
+                            'the channel list file this Manager wrote), then compares the Live TV settings with the backup '
+                            'taken before it was added. No other tuner, guide source, library or session is touched.',
+                            'Remove the Live TV channels from your Jellyfin server?'):
+            self.say('info', 'Not approved. Nothing was changed.')
+            return
+
+        def work(session, out):
+            return self.sa.livetv_remove(session, out)
+
+        def then(ok):
+            self.results.append(('remove', ok))
+            self.plan = None
+            self.add.setEnabled(False)
+            self.say('ok' if ok else 'error', 'Removed; the Live TV settings equal the backup. In Apps, choose "Local '
+                     'Weather only".' if ok else 'Not removed cleanly: see the lines below.')
+        self.run('Removing the tuner...', work, then)
+
+
+class ChromaTubeDialog(ServerSetupDialog):
+    """Settings > ChromaTube (optional): the ready-to-paste Docker files for the owner's own server (Chromatic Manager
+    cannot and does not install containers), a check that the tool answers on the home network, and the ChromaTube
+    library on the Jellyfin server (Add and Remove, each with its own Approve). Starts with the terms notice."""
+
+    TITLE = 'ChromaTube server'
+
+    def __init__(self, parent, options=None):
+        super().__init__(parent, options)
+        sa = self.sa
+        self.body.addWidget(label(sa.TERMS, 'notice', size=self.small))
+        self.agree = QCheckBox('I understand. Setting this up is my own private choice.')
+        self.agree.setFont(theme.body_font(self.small + 0.5))
+        self.agree.toggled.connect(self._follow_agree)
+        self.body.addWidget(self.agree)
+        grid = QGridLayout()
+        self.host, self.media, self.settings = QLineEdit(), QLineEdit(), QLineEdit()
+        self.host.setPlaceholderText('The Docker machine\'s home-network address, for example 192.168.1.20')
+        self.media.setPlaceholderText('Media folder on the Docker machine (one Jellyfin already sees, not inside a library)')
+        self.settings.setPlaceholderText('Settings folder on the Docker machine, for example /volume1/docker/chromatube')
+        self.channels = QPlainTextEdit()
+        self.channels.setPlaceholderText('YouTube channels, one a line: https://www.youtube.com/@name')
+        self.channels.setMaximumHeight(70)
+        for n, (name, widget) in enumerate((('Docker machine', self.host), ('Media folder', self.media),
+                                            ('Settings folder', self.settings))):
+            widget.setFont(theme.body_font(self.small))
+            grid.addWidget(label(name, 'dim', wrap=False, size=self.small), n, 0)
+            grid.addWidget(widget, n, 1)
+        self.channels.setFont(theme.body_font(self.small))
+        self.body.addLayout(grid)
+        self.body.addWidget(self.channels)
+        files = QHBoxLayout()
+        self.save = button('Save files...', 'go', size=self.small + 0.5)
+        self.save.setToolTip('Writes docker-compose.yml and the four settings files to a folder you choose on this PC. '
+                             'config.json gets the tool\'s page sign-in (random; a copy stays in this PC\'s private folder).')
+        self.save.clicked.connect(self.save_files)
+        self.check_tool = button('Check it answers', '', size=self.small + 0.5)
+        self.check_tool.setToolTip('Asks the tool\'s own page on your home network (port 5005): its settings page must '
+                                   'refuse a visitor without the sign-in and answer with the one kept on this PC. Nothing '
+                                   'else is sent. Allow this PC on the firewall only for the check, then remove that rule: '
+                                   'the sign-in does not cover the tool\'s command channel.')
+        self.check_tool.clicked.connect(self.check_answers)
+        for widget in (self.save, self.check_tool):
+            widget.setFixedHeight(30)
+            files.addWidget(widget)
+        files.addStretch(1)
+        self.body.addLayout(files)
+        self.steps = QPlainTextEdit('\n'.join(sa.STEPS))
+        self.steps.setReadOnly(True)
+        self.steps.setMinimumHeight(80)  # it scrolls
+        self.steps.setMaximumHeight(120)
+        self.steps.setFont(theme.body_font(self.small))
+        self.body.addWidget(self.steps)
+        row = QHBoxLayout()
+        self.server_folder = QLineEdit()
+        self.server_folder.setPlaceholderText('The ChromaTube folder as your Jellyfin server sees it, for example /config/ChromaTube')
+        self.server_folder.setFont(theme.body_font(self.small))
+        row.addWidget(self.server_folder, 1)
+        self.find = button('Find it', '', size=self.small)
+        self.find.setFixedHeight(28)
+        self.find.setToolTip('Lists folders on your server (read only) for one named ChromaTube that Jellyfin already sees.')
+        self.find.clicked.connect(self.find_folder)
+        row.addWidget(self.find)
+        self.body.addLayout(row)
+        self.dry = self.action_button('Dry run', 'go', 'Reads only: checks the folder and shows what Add would do.', self.dry_run)
+        self.add = self.action_button('Add library', 'yes', 'Adds the ChromaTube library after your Approve.', self.add_now)
+        self.remove = self.action_button('Remove library', 'stop', 'Deletes exactly the ChromaTube library this PC recorded '
+                                         '(its files stay), after your Approve.', self.remove_now)
+        self.add.setEnabled(False)
+        self.finish_layout()
+        self._follow_agree()
+
+    def _apply_privacy(self):
+        super()._apply_privacy()
+        for widget in (self.host, self.media, self.settings, self.server_folder):
+            widget.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit if Privacy.on else QLineEdit.EchoMode.Normal)
+
+    def _follow_agree(self):
+        on = self.agree.isChecked() and not self.busy
+        for widget in (self.host, self.media, self.settings, self.channels, self.save, self.check_tool, self.server_folder,
+                       self.find, self.dry, self.remove):
+            widget.setEnabled(on)
+        self.add.setEnabled(False)
+
+    def set_enabled(self, on):
+        super().set_enabled(on and self.agree.isChecked())
+        self.close_button.setEnabled(on)
+        self.add.setEnabled(False)
+
+    def save_files(self):
+        host, media, settings = self.host.text().strip(), self.media.text().strip(), self.settings.text().strip()
+        channels = self.channels.toPlainText().splitlines()
+        try:  # everything checked before a folder is asked for (a throw-away sign-in: nothing is kept by this check)
+            self.sa.settings_files(host, channels, self.sa.new_signin())
+            self.sa.compose_text(media, settings)
+        except ValueError as error:
+            self.say('error', str(error))
+            return
+        choose = self.options.get('choose_folder')
+        if choose is None:
+            from PySide6.QtWidgets import QFileDialog
+            choose = lambda: QFileDialog.getExistingDirectory(self, 'Save the ChromaTube files in')
+        folder = choose()
+        if not folder:
+            return
+        try:
+            self.sa.save_server_files(folder, host, media, settings, channels)
+        except (OSError, ValueError):
+            self.say('error', 'The files could not be written there.')
+            return
+        self.say('ok', 'Saved: docker-compose.yml, config.json, yt_config.json, crons.json and channel_list.json. '
+                 + self.sa.SIGNIN_WHERE + ' Follow the steps below on your Docker machine (the firewall step is required: '
+                 'it is the real protection).')
+
+    def check_answers(self):
+        """Asks the tool's page off the window's thread (review L8 of 1.6.5: two asks of up to 4 s each must never
+        freeze the window); the answer comes back through a signal."""
+        check = self.options.get('check', self.sa.tool_check)
+        host = self.host.text().strip()
+        if not self.sa.private_host(host):
+            self.say('error', self.sa.CHECK_WORDS['lan'])
+            return
+        if getattr(self, '_check_bridge', None) is None:
+            self._check_bridge = _Done(self)
+            self._check_bridge.done.connect(self._check_done)
+        self.check_tool.setEnabled(False)
+        self.checking = True
+        self.say('info', 'Asking the ChromaTube tool on your home network... (a few seconds)')
+
+        def body():
+            try:
+                result = check(host)
+            except Exception:  # plain words only
+                result = 'down'
+            self._check_bridge.done.emit(result)
+        threading.Thread(target=body, name='chromatube-check', daemon=True).start()
+
+    def _check_done(self, result):
+        self.checking = False
+        self.check_tool.setEnabled(self.agree.isChecked() and not self.busy)
+        self.say('ok' if result == 'ok' else 'error', self.sa.CHECK_WORDS.get(result, self.sa.CHECK_WORDS['down']))
+
+    def find_folder(self):
+        def work(session, out):
+            return self.sa.find_chromatube_folders(session)
+
+        def then(found):
+            if len(found) == 1:
+                self.server_folder.setText(found[0])
+                self.say('ok', 'Found one ChromaTube folder Jellyfin already sees (shown masked while private details are '
+                               'hidden).')
+            else:
+                self.say('error' if not found else 'info', 'No ChromaTube folder with channel folders was found: type it.'
+                         if not found else f'{len(found)} folders found: type the one you mean.')
+        self.run('Listing folders on your server (read only)...', work, then)
+
+    def dry_run(self):
+        path = self.server_folder.text().strip()
+        self.add.setEnabled(False)
+
+        def work(session, out):
+            return self.sa.chromatube_plan(session, path)
+
+        def then(result):
+            problems, text = result
+            self.lines.setPlainText(text)
+            self.say('error' if problems else 'ok', 'Not ready: see the lines below. Nothing was changed.' if problems
+                     else 'Ready: press Add library to make this change.')
+            self.add.setEnabled(not problems)
+            self.ready_path = None if problems else path
+        self.run('Reading your server (nothing changes)...', work, then)
+
+    def add_now(self):
+        path = getattr(self, 'ready_path', None)
+        if not path or path != self.server_folder.text().strip():
+            return
+        if not self.approve('This changes your Jellyfin server: it adds ONE library named ChromaTube (type Shows, no internet '
+                            'metadata, no images, no real-time monitor) on the folder you chose, then scans that library '
+                            'alone. Backup first; every other library must stay unchanged; Remove undoes it.\n\n'
+                            + self.sa.TERMS, 'Add the ChromaTube library to your Jellyfin server?'):
+            self.say('info', 'Not approved. Nothing was changed.')
+            return
+        self.add.setEnabled(False)
+
+        def work(session, out):
+            return self.sa.chromatube_add(session, path, out)
+
+        def then(ok):
+            self.results.append(('add', ok))
+            self.say('ok' if ok else 'error', 'Added. Now open Apps and turn ChromaTube on.' if ok else
+                     'Not added cleanly: see the lines below.')
+        self.run('Adding the library...', work, then)
+
+    def remove_now(self):
+        if not self.sa.CHROMATUBE_STATE.exists():  # review L1 of 1.6.4: no record on this PC: look first (read only)
+            def look(session, out):
+                return self.sa.chromatube_unrecorded(session)
+
+            def then_look(known):
+                if not known:
+                    self.say('error', 'This PC has no record of adding the ChromaTube library, and the one on your server '
+                                      'does not look like a ChromaTube folder. Nothing was changed.')
+                    return
+                self._remove(unrecorded=True)
+            self.run('Looking at the ChromaTube library (read only)...', look, then_look)
+            return
+        self._remove(unrecorded=False)
+
+    def _remove(self, unrecorded):
+        text = ('This changes your Jellyfin server: it deletes exactly the library named ChromaTube that this PC '
+                'recorded (its id and folder must still match). Its files are not touched. Afterwards, stop and '
+                'delete the chromatube project in your Docker app and delete its folders.') if not unrecorded else (
+               'This PC has no record of adding the ChromaTube library (an earlier tool or another PC added it). The '
+               'library named ChromaTube on your server has one folder named ChromaTube with channel folders in it. '
+               'Remove deletes that library only; its files are not touched. Approve only if it is the one you set up '
+               'for ChromaTube.')
+        if not self.approve(text, 'Remove the ChromaTube library from your Jellyfin server?'):
+            self.say('info', 'Not approved. Nothing was changed.')
+            return
+
+        def work(session, out):
+            return self.sa.chromatube_remove(session, out, unrecorded_ok=unrecorded)
+
+        def then(ok):
+            self.results.append(('remove', ok))
+            self.say('ok' if ok else 'error', 'Removed. In Apps, turn ChromaTube off; in your Docker app, stop and delete '
+                     'the chromatube project.' if ok else 'Not removed: see the lines below.')
+        self.run('Removing the library...', work, then)
+
+
+class FirstWeatherDialog(QDialog):
+    """A first install's "Add Local Weather?" (1.6.5), before the install's Approve: choose your place (and its area
+    pages), use the default (Orlando, FL), or skip (the TV row is hidden until Apps turns it on). Nothing is written
+    here; the install writes the answer, said before its writes, under its own Approve."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.answer = None
+        self.setWindowTitle('Add Local Weather?')
+        self.setModal(True)
+        fit_dialog(self, parent, 520)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 18, 22, 16)
+        small = theme.GEOMETRY['small_point_size']
+        layout.addWidget(label('ADD LOCAL WEATHER?', 'info', wrap=False, size=theme.GEOMETRY['base_point_size'] + 3, bold=True))
+        layout.addWidget(label('The start-up menu\'s TV row opens a retro local forecast from the US weather service. '
+                               'Choose your location (a US ZIP code or "City, ST"), use the default (Orlando, FL), or '
+                               'skip it (the TV row stays hidden; turn it on any time in Settings > Apps). Nothing is '
+                               'written until you approve the install.', 'dim', size=small))
+        row = QHBoxLayout()
+        for text, answer, role in (('Choose my place...', 'place', 'go'), ('Use Orlando, FL', 'default', ''),
+                                   ('Skip Local Weather', 'skip', 'no')):
+            b = button(text, role)
+            b.setFixedHeight(34)
+            b.setAutoDefault(False)
+            b.clicked.connect(lambda _=False, a=answer: self._pick(a))
+            row.addWidget(b)
+        layout.addLayout(row)
+        centre_on(self, parent)
+
+    def _pick(self, answer):
+        self.answer = answer
+        self.accept()
+
+
 class Dialogs:
     """Real dialogs. Tests replace this with scripted answers."""
 
@@ -1883,6 +2892,21 @@ class Dialogs:
         """The person's approval of one action. `requested_by` is set when a program asked
         through the local API: it is shown on the dialog, and still only a click approves."""
         return self.approve(approve_prompt(action, requested_by, reason, self.release()))
+
+    def first_weather(self, window):
+        """A first install's question (1.6.5): ('place', Place, Pack or None), ('default',), ('skip',), or None when the
+        owner closed it."""
+        dialog = FirstWeatherDialog(self.parent)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        if dialog.answer != 'place':
+            return (dialog.answer,)
+        page = WeatherDialog(self.parent, launcher=window.console_launcher(), first=True,
+                             **dict(window.weather_defaults(), **window.weather_options))
+        page.exec()
+        if page.choice == 'write' and page.place is not None:
+            return ('place', page.place, page.pack)
+        return ('default',) if page.choice == 'default' else None
 
     def ai_control(self, requested_by, action=None, image=None):
         """The AI-control pop-up: (allow, remember)."""
@@ -1943,7 +2967,8 @@ class MainWindow(QWidget):
     def __init__(self, cm, manager_factory=None, lock_factory=None, dialogs=None, root=ROOT, frameless=True,
                  log_folder=None, detect=None, updater_running=None, clock=time.monotonic, settings_path=None,
                  hardware_gate=None, guide_path=None, guide_session=None, sound_image=None, pilot=None,
-                 pilot_open=None, pilot_choose=None, jellyfin_page=None, link_image=None, link_guide_path=None):
+                 pilot_open=None, pilot_choose=None, jellyfin_page=None, link_image=None, link_guide_path=None,
+                 weather_page=None):
         """`detect`: a callable giving how many consoles are plugged in (USB enumeration only).
         With it, the window notices a real plug-in and checks the console by itself (see
         poll_console); the real window passes one, tests pass a simulated one or none.
@@ -1962,9 +2987,16 @@ class MainWindow(QWidget):
         inert one that finds, starts and contacts nothing (tests and previews). `pilot_open`
         opens the viewer ('window' or 'browser', url); `pilot_choose` asks for its folder.
         `jellyfin_page`: options for the Jellyfin page (JellyfinDialog: path, tester, finder, saver,
-        loader); tests and previews pass a temporary file and stand-ins, never the private file."""
+        loader); tests and previews pass a temporary file and stand-ins, never the private file.
+        `weather_page`: options for the Weather location page (WeatherDialog: finder, resolver, loader);
+        tests pass stand-ins, so no test reaches the weather service."""
         super().__init__()
         self.jellyfin_options = dict(jellyfin_page or {})
+        self.weather_options = dict(weather_page or {})
+        self.weather_dialog = None
+        # 1.6.4: Settings > Apps and the optional server setups (tests set apps_options / server_options).
+        self.apps_options, self.server_options = {}, {}
+        self.apps_dialog = self.server_dialog = None
         self.jellyfin_dialog = None
         self._summary_before = {}
         if guide_session is None or sound_image is None or link_image is None:
@@ -2276,6 +3308,7 @@ class MainWindow(QWidget):
         self.log.setPlainText('\n'.join(shown(line) for line in self.log_lines))
         if at_end:
             bar.setValue(bar.maximum())
+        self.refresh_weather_state()
 
     def log_line(self, text):
         """One line in the log panel (the time first), shown masked while private details are hidden."""
@@ -2492,8 +3525,45 @@ class MainWindow(QWidget):
                                       'Jellyfin sign-in gives your Chromatic its own sign-in.')
         self.jellyfin_open.clicked.connect(self.open_jellyfin_page)
         layout.addWidget(self.jellyfin_open, 0, Qt.AlignmentFlag.AlignLeft)
+        # The Local Weather channel's place (launcher 1.6.3+): Orlando, FL (1.6.4+) unless the owner chooses another.
+        layout.addSpacing(6)
+        layout.addWidget(label('WEATHER LOCATION', 'value', size=theme.GEOMETRY['base_point_size'] + 1, bold=True))
+        self.weather_state = label('', 'value', size=theme.GEOMETRY['small_point_size'])
+        layout.addWidget(self.weather_state)
+        self.weather_open = button('Weather location', 'go')
+        self.weather_open.setFixedHeight(32)
+        self.weather_open.setToolTip('The place your Chromatic\'s Local Weather channel shows: a US ZIP code or a town, '
+                                     'looked up on this PC; or the default, Orlando, FL. Writing it to the console asks '
+                                     'for your Approve.')
+        self.weather_open.clicked.connect(self.open_weather_page)
+        layout.addWidget(self.weather_open, 0, Qt.AlignmentFlag.AlignLeft)
+        # Launcher 1.6.4: which apps the start-up menu shows, and the optional server setups behind TV and ChromaTube.
+        layout.addSpacing(6)
+        layout.addWidget(label('APPS ON THE START-UP MENU', 'value', size=theme.GEOMETRY['base_point_size'] + 1, bold=True))
+        self.apps_state = label('', 'value', size=theme.GEOMETRY['small_point_size'])
+        layout.addWidget(self.apps_state)
+        row = QHBoxLayout()
+        self.apps_open = button('Apps', 'go')
+        self.apps_open.setToolTip('TV (Local Weather only, or with your server\'s Live TV channels) and ChromaTube, each on '
+                                  'or off on your Chromatic\'s start-up menu. Writing it asks for your Approve.')
+        self.apps_open.clicked.connect(self.open_apps_page)
+        self.livetv_open = button('Live TV channels', '')
+        self.livetv_open.setToolTip('Optional: add (or remove) Live TV channels on your Jellyfin server for the TV app. '
+                                    'Changes only your server, after a dry run and your Approve.')
+        self.livetv_open.clicked.connect(self.open_livetv_page)
+        self.tube_open = button('ChromaTube server', '')
+        self.tube_open.setToolTip('Optional: the Docker files for ChromaTube on your own server, then its Jellyfin library '
+                                  '(add or remove). Read the terms notice first.')
+        self.tube_open.clicked.connect(self.open_chromatube_page)
+        for widget in (self.apps_open, self.livetv_open, self.tube_open):
+            widget.setFixedHeight(32)
+            row.addWidget(widget)
+        row.addStretch(1)
+        layout.addLayout(row)
         layout.addStretch(1)
         self.refresh_jellyfin_state()
+        self.refresh_weather_state()
+        self.refresh_apps_state()
         return page
 
     def _about_page(self):
@@ -3387,6 +4457,190 @@ class MainWindow(QWidget):
             self.start('jellyfin')
         return dialog.choice
 
+    def saved_weather_place(self):
+        loader = self.weather_options.get('loader')
+        try:
+            if loader:
+                return loader()
+            import chromatic_weather_location as wl
+            return wl.load_saved(self.cm.LOCATION_FILE)
+        except Exception:
+            return None
+
+    def console_launcher(self):
+        """The console's launcher version at the last check, or None: 1.6.4+ (and not known) show Orlando, FL with no
+        weather location; an older one its own built-in place."""
+        try:
+            with self.service._lock:
+                return dict(self.service.summary).get('launcher')
+        except Exception:
+            return None
+
+    def refresh_weather_state(self):
+        if not hasattr(self, 'weather_state'):
+            return
+        place = self.saved_weather_place()
+        launcher = self.console_launcher()
+        import chromatic_weather_location as wl
+        self.weather_state.setText(f'Saved on this PC: {shown_name(place.name)}. The console shows it once written.'
+                                   if place else f'{wl.default_name(launcher)} (default).')
+
+    @staticmethod
+    def weather_defaults():
+        """The Weather location page's pack maker and page preview (1.6.5): the real ones; tests pass their own."""
+        def maker(place):
+            import make_location_pack as mk
+            return mk.make(place)
+
+        def previewer(place, pack):
+            import chromatic_weather_preview as wp
+            return wp.pages(place, pack)
+        return {'maker': maker, 'previewer': previewer}
+
+    def first_weather_choice(self):
+        """A first install's "Add Local Weather?", asked before its Approve when the last check saw a console without the
+        start-up menu and no weather location is saved on this PC: ('place', Place, Pack or None), ('default',),
+        ('skip',); None when not asked; False when the owner closed the question (the install is not started)."""
+        try:
+            with self.service._lock:
+                state = dict(self.service.summary).get('state')
+        except Exception:
+            state = None
+        if state != 'stock' or self.saved_weather_place() is not None:
+            return None
+        ask = getattr(self.dialogs, 'first_weather', None)
+        if ask is None:
+            return None
+        answer = ask(self)
+        if answer is None:
+            return False
+        return answer
+
+    def open_weather_page(self):
+        """Settings > Weather location (WeatherDialog). A chosen place, or the default, is written to
+        the console by the 'weather' job after the owner's Approve; the job saves it on this PC only
+        once the console verifiably holds it. Cancelled: nothing is written or saved. Returns the
+        dialog's choice."""
+        if self.busy() or self.service.busy() or self._confirming:
+            return None
+        self._confirming = True
+        try:
+            options = dict({'launcher': self.console_launcher()}, **self.weather_defaults())
+            options.update(self.weather_options)
+            dialog = WeatherDialog(self, **options)
+            self.weather_dialog = dialog
+            dialog.exec()
+        finally:
+            self._confirming = False
+            self.weather_dialog = None
+        if dialog.choice in ('write', 'default'):
+            action = BY_KEY['weather']
+            self._confirming = True
+            try:
+                approved = self.dialogs.confirm(action)
+            finally:
+                self._confirming = False
+            if not approved:
+                self.add_line(f'{action.title}: cancelled. Nothing done.')
+                self.refresh_weather_state()
+                return dialog.choice
+            try:  # approved: the job writes this choice, and saves it on this PC once the console holds it
+                self.cm.pending_location(dialog.place if dialog.choice == 'write' else None,
+                                         dialog.pack if dialog.choice == 'write' else None)
+            except (OSError, ValueError):
+                self.add_line('The weather location could not be handed to the job on this PC. Nothing was changed.')
+                return dialog.choice
+            if not self.start('weather', confirmed=True, confirmed_by=APPROVED_IN_WINDOW):
+                self.cm.drop_pending_location()
+        self.refresh_weather_state()
+        return dialog.choice
+
+    def known_apps(self):
+        """(flags, where): what the console showed at the last check, else this PC's copy, else the defaults."""
+        import chromatic_apps as ap
+        summary = {} if self._stale else dict(self.service.summary)
+        flags = ap.from_words(summary.get('apps'))
+        if flags is not None:
+            return flags, 'on the console at the last check'
+        loader = self.apps_options.get('loader')
+        try:
+            saved = loader() if loader else ap.load_saved(self.cm.APPS_FILE)
+        except Exception:
+            saved = None
+        if saved is not None:
+            return saved, 'saved on this PC'
+        return ap.DEFAULTS, 'the defaults'
+
+    def refresh_apps_state(self):
+        if not hasattr(self, 'apps_state'):
+            return
+        import chromatic_apps as ap
+        flags, where = self.known_apps()
+        self.apps_state.setText(f'{ap.words(flags)} ({where}).')
+
+    def open_apps_page(self):
+        """Settings > Apps (AppsDialog). The choice is written by the 'apps' job after the owner's Approve; the job saves it
+        on this PC once the console holds it. Cancelled: nothing is written or saved. Returns the dialog's choice."""
+        if self.busy() or self.service.busy() or self._confirming:
+            return None
+        self._confirming = True
+        try:
+            flags, where = self.known_apps()
+            dialog = AppsDialog(self, flags, where)
+            self.apps_dialog = dialog
+            self.apps_ready(dialog)
+            dialog.exec()
+        finally:
+            self._confirming = False
+            self.apps_dialog = None
+        if dialog.choice in ('write', 'default'):
+            action = BY_KEY['apps']
+            self._confirming = True
+            try:
+                approved = self.dialogs.confirm(action)
+            finally:
+                self._confirming = False
+            if not approved:
+                self.add_line(f'{action.title}: cancelled. Nothing done.')
+                return dialog.choice
+            try:
+                self.cm.pending_apps(dialog.flags if dialog.choice == 'write' else None)
+            except (OSError, ValueError):
+                self.add_line('The apps choice could not be handed to the job on this PC. Nothing was changed.')
+                return dialog.choice
+            if not self.start('apps', confirmed=True, confirmed_by=APPROVED_IN_WINDOW):
+                self.cm.drop_pending_apps()
+        self.refresh_apps_state()
+        return dialog.choice
+
+    def open_server_page(self, kind):
+        """Settings > Live TV channels / ChromaTube server: the optional server setups (their own dialogs; every server
+        change there asks for its own Approve). Not while a console job runs. Returns the dialog."""
+        if self.busy() or self.service.busy() or self._confirming:
+            return None
+        self._confirming = True
+        try:
+            dialog = (LiveTvDialog if kind == 'livetv' else ChromaTubeDialog)(self, self.server_options)
+            self.server_dialog = dialog
+            self.apps_ready(dialog)
+            dialog.exec()
+        finally:
+            self._confirming = False
+            self.server_dialog = None
+        return dialog
+
+    def open_livetv_page(self):
+        return self.open_server_page('livetv')
+
+    def open_chromatube_page(self):
+        return self.open_server_page('chromatube')
+
+    def apps_ready(self, dialog):
+        """Tests: a hook called with each Apps / server dialog just before it is shown."""
+        hook = getattr(self, 'on_apps_dialog', None)
+        if hook:
+            QTimer.singleShot(0, lambda: hook(dialog))
+
     def refresh_jellyfin_state(self):
         if not hasattr(self, 'jellyfin_state'):
             return
@@ -3504,6 +4758,7 @@ class MainWindow(QWidget):
         if key == 'settings':
             self.refresh_ai()
             self.refresh_jellyfin_state()
+            self.refresh_weather_state()
         self.title.setText(self.TITLES[key])
         if key == 'pilot':
             self.pilot_tab_opened()
@@ -3602,6 +4857,16 @@ class MainWindow(QWidget):
         if self.busy() or self.service.busy() or self._confirming:
             return False
         action = BY_KEY[key]
+        first = None
+        if key == 'install' and not confirmed:  # 1.6.5: a first install asks "Add Local Weather?" before its Approve
+            self._confirming = True
+            try:
+                first = self.first_weather_choice()
+            finally:
+                self._confirming = False
+            if first is False:
+                self.add_line(f'{action.title}: cancelled. Nothing done.')
+                return False
         if action.confirm and not confirmed:
             self._confirming = True
             try:
@@ -3611,6 +4876,11 @@ class MainWindow(QWidget):
             if not ok:
                 self.add_line(f'{action.title}: cancelled. Nothing done.')
                 return False
+        if key == 'install':
+            try:
+                self.cm.pending_first_weather(first or None)
+            except (OSError, ValueError):
+                self.add_line('The Local Weather choice could not be handed to the install on this PC; it uses the default.')
         # The service announces 'started' straight back on this thread, which sets up the screen.
         setup = 'change' if key == 'install' and self.change_setup.isChecked() else 'auto'
         started = self.service.start(key, requested_by=OWNER, setup=setup,
@@ -3844,6 +5114,8 @@ class MainWindow(QWidget):
         result = self.service.result()
         key = self.running
         self.running = None
+        if key == 'weather':
+            self.refresh_weather_state()  # the job saves the choice once the console holds it
         self._quiet_until = self.clock() + self.AFTER_JOB_S  # it reset the console: let it settle
         self.clock_timer.stop()
         self.last_code = code
@@ -3853,6 +5125,7 @@ class MainWindow(QWidget):
             self.show_summary(found)
         elif key != 'status' and key in WRITE_KEYS:
             self.after_write(key, code)
+        self.refresh_apps_state()  # 1.6.4: what the console's menu shows, from this job's own words
         head, self.next_text, took = result['headline'], result['next'], result['took']
         tone = RESULT_TONES.get(result['role'], 'update')
         if 'download mode' in self.next_text or 'damaged' in self.next_text:

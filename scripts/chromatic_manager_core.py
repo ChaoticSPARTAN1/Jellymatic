@@ -126,7 +126,13 @@ ACTIONS = (  # key, button, title, tab, confirm, pending_ok, kind, help (plain w
     Action('install', 'Repair menu', 'Install the start-up menu', 'recovery', 'yes', False, '',
            'Puts the start-up menu on your Chromatic, updates it, or turns it back on after an official update. '
            'Takes about 2 minutes. New firmware is backed up first. If Wi-Fi and Jellyfin are not set up yet, '
-           'they are set up too.'),
+           'they are set up too. If a weather location is saved on this PC and the console lost it, it is written '
+           'back in the same job. So is the apps choice (which apps the menu shows) when the console holds none: the '
+           'one saved on this PC, or, when the console runs start-up menu 1.6.0-1.6.3, TV with Live TV channels and '
+           'ChromaTube, as it shows them now. The weather location and its area pages saved on this PC are written '
+           'back the same way, and a console whose older start-up menu showed a place of its own keeps it when this '
+           'PC holds that place (it is said before the write). A first install asks "Add Local Weather?" first: your '
+           'place (with its area pages), the default Orlando, FL, or skip (the TV row hidden).'),
     Action('update', 'Official update', 'Official ModRetro update (guided)', 'console', 'yes', False, '',
            'Helps you run ModRetro\'s own updater: the menu is turned off, you run the updater, then this app '
            'checks the result, backs it up and turns the menu back on. This app never starts the updater.'),
@@ -138,6 +144,19 @@ ACTIONS = (  # key, button, title, tab, confirm, pending_ok, kind, help (plain w
     Action('jellyfin', 'New Jellyfin sign-in', 'Give the console a new Jellyfin sign-in', 'console', 'yes', False, '',
            'Signs your Chromatic in to Jellyfin again and signs the old sign-in out. Your password stays on this '
            'PC. Wi-Fi stays as it is.'),
+    # Settings > Weather location (launcher 1.6.3+): the page saves the owner's choice on this PC; this job
+    # writes it (or, with none saved, the default) to the console's two location sectors.
+    Action('weather', 'Write weather location', 'Set the Local Weather location on the console', 'settings', 'yes',
+           False, '',
+           'Writes the weather location saved on this PC to your Chromatic for its Local Weather channel, or, with '
+           'none saved, puts it back to the default, Orlando, FL. Only that small area is written, checked on the '
+           'chip. Takes about 1 minute; a game that is playing stops. Games, Wi-Fi and Jellyfin stay as they are.'),
+    # Settings > Apps (launcher 1.6.4+): which optional apps the start-up menu shows; written to the two apps sectors.
+    Action('apps', 'Write apps', 'Set which apps the start-up menu shows', 'settings', 'yes', False, '',
+           'Writes your choice of apps to your Chromatic\'s start-up menu: TV (with Local Weather only, or also your '
+           'Jellyfin server\'s Live TV channels) and ChromaTube, each on or off. Games, Jellyfin and Other firmware always '
+           'stay. Only that small area is written, checked on the chip. Takes about 1 minute; a game that is playing stops. '
+           'Games, Wi-Fi, Jellyfin and the weather location stay as they are.'),
     Action('remove', 'Remove menu', 'Remove the start-up menu', 'recovery', 'yes', False, 'stop',
            'Takes the start-up menu off completely. The console goes back to how ModRetro made it. This also '
            'erases the menu\'s setup: every Wi-Fi network (also ones added on the console), the PC pairing and the '
@@ -358,6 +377,10 @@ def run_action(cm, manager, key, ask, secret, lock, setup='auto', phase=None, fp
                 return cm.jellyfin_relink(manager)
             if key == 'jellyfin_forget':
                 return cm.jellyfin_forget(manager)
+            if key == 'weather':
+                return cm.weather_location_job(manager)
+            if key == 'apps':
+                return cm.apps_job(manager)
             if key == 'remove':
                 return manager.remove()
             if key == 'disable':
@@ -430,6 +453,9 @@ def summarize(lines):
         setup = re.match(r'Console setup: (.*)\.$', line.strip())
         if setup:
             found['setup'] = setup.group(1)
+        apps = re.match(r'Apps on the start-up menu(?: now)?: (.*)\.$', line.strip())  # launcher 1.6.4+ (chromatic_apps.words)
+        if apps:
+            found['apps'] = apps.group(1)
         launcher = re.match(r'Launcher in flash: version (\S+); this tool installs (\S+?)(?: \(|\.$)', line.strip())
         current = re.match(r'Launcher in flash: version (\S+), the one this tool installs', line.strip())
         if console:
@@ -604,6 +630,11 @@ def summary_after_job(key, code, lines, before):
         return before
     if key in SETUP_KEYS and code == 0 and before:
         return dict(before, setup='changed by the last job; check status to see it')
+    if key == 'weather' and code == 0 and before:  # only the weather location sectors changed
+        return dict(before)
+    if key == 'apps' and code == 0 and before:  # only the apps sectors changed: what they say now, from the job's own line
+        said = summarize(lines).get('apps')
+        return dict(before, apps=said) if said else dict(before)
     return dict(CHANGED, checked=time.strftime('%Y-%m-%d %H:%M:%S'))
 
 

@@ -157,8 +157,25 @@ def single_writer_rules():
         line = next(l for l in code.splitlines() if call in l)
         if 'if(!pj_pw_allowed(offset,size))return -1;' not in line or line.index('pj_pw_allowed') > line.index(call):
             raise SystemExit(f'{call} in provision_write.c is not guarded by the address check first')
-    if 'return (offset==PJ_PROV_FLASH_A||offset==PJ_PROV_FLASH_B)&&size==PJ_PW_SECTOR;' not in code:
-        raise SystemExit('provision_write.c address check changed')
+    # Launcher 1.6.4: the same writer also writes the apps record (shared/apps_record.h), on its own two sectors. The
+    # device wrappers allow exactly the four sectors, whole; each commit checks that the sector it erases is of its OWN
+    # pair (the setup commit never names the apps sectors, the apps commit never the setup sectors).
+    for line in ('static int pj_pw_setup_sector(uint32_t offset){return offset==PJ_PROV_FLASH_A||offset==PJ_PROV_FLASH_B;}',
+                 'static int pj_pw_apps_sector(uint32_t offset){return offset==PJ_APPS_FLASH_A||offset==PJ_APPS_FLASH_B;}',
+                 'return (pj_pw_setup_sector(offset)||pj_pw_apps_sector(offset))&&size==PJ_PW_SECTOR;'):
+        if code.count(line) != 1:
+            raise SystemExit('provision_write.c address check changed')
+    setup_commit = code[code.index('int pj_provision_commit_with('):code.index('int pj_apps_commit_with(')]
+    apps_commit = code[code.index('int pj_apps_commit_with('):code.index('#ifdef ESP_PLATFORM')]
+    if ('PJ_APPS_FLASH' in setup_commit or 'pj_pw_apps_sector' in setup_commit
+            or setup_commit.count('if(!pj_pw_setup_sector(new_at)||!pj_pw_allowed(new_at,PJ_PW_SECTOR))') != 1
+            or setup_commit.count('if(!pj_pw_setup_sector(old_at)||!pj_pw_allowed(old_at,PJ_PW_SECTOR))') != 1
+            or 'PJ_PROV_FLASH' in apps_commit or 'pj_pw_setup_sector' in apps_commit or 'edit' in apps_commit
+            or apps_commit.count('if(!pj_pw_apps_sector(new_at)||!pj_pw_allowed(new_at,PJ_PW_SECTOR))') != 1
+            or apps_commit.count('flash->erase(') != 1 or apps_commit.count('flash->write(') != 1
+            or 'uint32_t new_at=have&&!in_b?PJ_APPS_FLASH_B:PJ_APPS_FLASH_A' not in apps_commit
+            or 'memcmp(back,image,PJ_PW_SECTOR)' not in apps_commit):
+        raise SystemExit('each commit must erase and write only its own pair (1.6.4 apps record: the copy not in force, read back)')
     # Launcher 1.2.9: the move-to-top edit (Use this network now) is the fourth and last network op; only SAVE copies the
     # edit's network (with its password) into the record, FIRST only reorders the record's own entries.
     header = (SOURCE / 'shared/provision_write.h').read_text(encoding='utf-8')
@@ -183,7 +200,7 @@ def single_writer_rules():
     # no-OS hooks (esp_flash_app_disable_protect: other CPU left running with its cache off) are never used.
     if ('esp_flash_app_disable' in code or 'DANGEROUS_WRITE' in code or code.count('region_protected') != 1
             or 'device.os.region_protected=pj_pw_region;' not in code
-            or 'return ((start==PJ_PROV_FLASH_A||start==PJ_PROV_FLASH_B)&&size==PJ_PW_SECTOR)?ESP_OK:ESP_ERR_NOT_SUPPORTED;' not in code
+            or 'return ((start==PJ_PROV_FLASH_A||start==PJ_PROV_FLASH_B||start==PJ_APPS_FLASH_A||start==PJ_APPS_FLASH_B)&&size==PJ_PW_SECTOR)?ESP_OK:ESP_ERR_NOT_SUPPORTED;' not in code
             or 'device.os=*esp_flash_default_chip->os_func;' not in code or 'device.chip.os_func=&device.os;' not in code
             or 'esp_flash_erase_region(&((pj_pw_device*)ctx)->chip,offset,size)' not in code
             or 'esp_flash_write(&((pj_pw_device*)ctx)->chip,data,offset,size)' not in code
@@ -207,6 +224,12 @@ def single_writer_rules():
     binding = re.sub(r'/\*.*?\*/', '', (SOURCE / 'main/setup_esp32.c').read_text(encoding='utf-8'), flags=re.S)
     if binding.count('pj_provision_commit(') != 1 or 'pj_provision_commit' in main_code:
         raise SystemExit('pj_provision_commit must be called from setup_esp32.c only, once')
+    # 1.6.4: the apps commit from the shell only, once (the menu's Hide / Show hidden apps); never from the setup.
+    if main_code.count('pj_apps_commit(') != 1 or 'pj_apps_commit' in binding:
+        raise SystemExit('pj_apps_commit must be called from launcher_main.c only, once')
+    apps_h = (SOURCE / 'shared/apps_record.h').read_text(encoding='utf-8')
+    if '#define PJ_APPS_FLASH_A 0x3FA000u' not in apps_h or '#define PJ_APPS_FLASH_B 0x3FB000u' not in apps_h:
+        raise SystemExit('apps record sector addresses moved (must be 0x3FA000 and 0x3FB000)')
     if 'pj_setup_draw(frame,setup,rmt.usb.state==PJ_LS_READY||rmt.lan.state==PJ_LS_READY,' not in main_code:
         raise SystemExit('the setup screens must be drawn with the Remote Pilot connection state')
     # Static DRAM: the setup is heap-only while open. Its files and hooks may declare no static arrays or
@@ -279,6 +302,7 @@ def linked_writer_callers():
     defined = {line.split()[-1] for line in symbols.splitlines() if len(line.split()) == 3 and line.split()[1] in 'TtWw'}
     targets = ('esp_flash_write', 'esp_flash_erase_region')
     linked_targets = [t for t in targets if t in defined]
+    # 1.6.4: the apps commit reaches the chip only through the same two wrappers (function pointers), so the set is unchanged
     allowed = {'pj_provision_commit', 'pj_provision_commit_with', 'pj_pw_dev_erase', 'pj_pw_dev_write'}
     holders, member, section = {}, None, None
     for archive in sorted((BUILD / 'esp-idf').rglob('lib*.a')):
@@ -965,7 +989,19 @@ def real_images():
                        # holds no launcher image until it is reviewed, because the Manager installs from it).
                        ('built launcher', Path(os.environ.get('LAUNCHER_IMAGE') or BUILD / 'chromatic_launcher.bin').read_bytes())):
         check_image(data, name)
-    print('PASS: stock firmware, built bootloader and built launcher validate as ESP32 images.')
+    # Review of 1.6.3, L2: a build-side size gate. Chromatic Manager installs the launcher image only below its first record
+    # (the location pack since 1.6.5, 0x3F6000; the apps record 1.6.4, 0x3FA000), so an image that would not fit is
+    # caught here, not at the console.
+    launcher = Path(os.environ.get('LAUNCHER_IMAGE') or BUILD / 'chromatic_launcher.bin').read_bytes()
+    lpack_h = (ROOT / 'chromatic' / 'weather' / 'wx_lpack.h').read_text(encoding='utf-8')
+    if '#define WX_LPACK_FLASH_A 0x3F6000u' not in lpack_h:
+        raise SystemExit('the location pack moved (its first copy must start at 0x3F6000, the end of the launcher area)')
+    limit = 0x3F6000 - 0x260000
+    if len(launcher) > limit:
+        raise SystemExit(f'the launcher image ({len(launcher)} B) does not fit Chromatic Manager\'s launcher area ({limit} B)')
+    print(f'PASS: stock firmware, built bootloader and built launcher validate as ESP32 images; the launcher '
+          f'({len(launcher):,} B) fits the Manager\'s launcher area below the location pack ({limit:,} B, '
+          f'{limit - len(launcher):,} B left).')
 
 
 if __name__ == '__main__':

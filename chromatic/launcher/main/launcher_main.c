@@ -20,6 +20,7 @@
  *    record: Wi-Fi joins (RAM storage, no NVS) and a task serves TCP 38771 to private
  *    addresses on the console's own subnet. The radio is off before stock runs.
  * Flash is only read: the provisioning record and, for Chromatic Manager, esp_flash_read.
+ * (The on-console setup's record and, 1.6.4, the apps record are written only by shared/provision_write.c.)
  */
 #include <stdio.h>
 #include <string.h>
@@ -48,6 +49,7 @@
 #include "soc/uart_struct.h"
 #include "esp32_media.h"
 #include "jellyfin_esp32.h"
+#include "weather_esp32.h" /* 1.6.0: the TV app's Local Weather channel: its fetch runs before the app is allocated */
 #include "launcher_diag.h"
 #include "launcher_logic.h"
 #include "wifi_order.h"
@@ -62,13 +64,14 @@
 #include "ui_font.h"
 #if PJ_ENABLE_SETUP /* SETUP HOOK: on-console Wi-Fi / Jellyfin setup (shared/setup_ui.h); 0 compiles it all out */
 #include "setup_esp32.h"
+#include "provision_write.h" /* 1.6.4: pj_apps_commit, the menu's Hide / Show hidden apps (the audited writer) */
 #define PJ_SETUP_IS_BUSY (pj_setup_esp32_busy()) /* a setup worker (scan, discovery, HTTP) is running: no radio change under it */
 #else
 #define PJ_SETUP_IS_BUSY 0
 #endif
 /* Printed on the console UART (the USB serial port) so the PC tool can prove which
  * program is running after a write. Plain text only: nothing about the unit. */
-#define PJ_LAUNCHER_VERSION "1.5.1" /* must equal PROJECT_VER in CMakeLists.txt */
+#define PJ_LAUNCHER_VERSION "1.6.5" /* must equal PROJECT_VER in CMakeLists.txt; 1.6.1: steadier weather voice lines; 1.6.2: public-domain voice; 1.6.3: weather location; 1.6.4: apps on/off, TV without Live TV opens Local Weather; 1.6.5: location packs (area pages for any US place), Orlando, FL the only built-in place */
 /* 1.3.5: the FPGA version line ("fpga version=18.41 debug=1") is said again every PJ_FPGA_LINE_MS and whenever the
  * reported version changes, so Chromatic Manager can read which image runs passively (no restart of this chip) after
  * a temporary FPGA load, and a console whose FPGA was reconfigured under a running launcher says so. */
@@ -158,6 +161,21 @@ static int plink_wanted,find_wanted,plink_refused;static uint32_t plink_hold_unt
 static unsigned plink_rx_line=PJ_PLD_PERIODIC; /* 1.3.6: the next "plink rx" line to offer after the 5 s line */
 static pj_plink_status plink_shown;
 static int link_fpga(void){return rx.version_seen&&pj_fpga_pocket_link(rx.version);}
+/* Launcher 1.6.0 (docs/Design-notes.md.6.md, docs/Design-notes.md). The TV row's built-in Local
+ * Weather channel needs an HTTPS connection (about 40-48 KB of heap at its peak, estimated), which does not fit beside
+ * the TV app (about 40 KB). So the channel is shown by the launcher itself with the app gone (review B2, H1): choosing
+ * its row ends the TV app (JF_EXIT_WEATHER); once the app's memory is back the weather module is opened
+ * (weather_esp32.c: fetches run only from here on, values and their ages are kept for the boot) and its pages are
+ * drawn here; B, Up or Down close it, and once its fetch task is gone the TV app starts again (the list, the next
+ * channel, the one before). Nothing of it but its small cache is in memory while a server channel plays, and that
+ * cache goes when Jellyfin, ChromaTube, Setup or the Pocket link is opened.
+ *  wx_mode: 0 off; 1 the TV app is letting go; 2 the channel is on; 3 it was left, its fetch task is leaving. */
+static int wx_mode,wx_redraw,wx_snd_on;static uint32_t wx_banner_until,wx_snd_try_ms,wx_diag_ms;
+/* 1.6.4 (docs/Design-notes.md.6.md "1.6.4"): the apps record (shared/apps_record.h), read at boot. Without Live TV
+ * (launcher.livetv 0) the TV row opens straight to the Local Weather channel and never asks the server anything.
+ *  wx_only: 0 not yet on this Media visit; 1 asked to open (or it could not); 2 left with B (back to the start-up menu).
+ *  apps_shown_saving: the "Saving..." frame of the Hide / Show question went out; the write runs on the next pass. */
+static int wx_only,apps_shown_saving;
 static uint32_t jf_press_at[16]; /* per button: a second edge within 120 ms is contact bounce */
 static uint32_t loop_ms,work_ms;
 /* Remote Pilot (CHR1) cost in the main loop, for the Jellyfin diagnostics: the longest pass and the sum since
@@ -298,6 +316,17 @@ static void plink_end(void) {
     pj_jl_end();
     if(link_fpga())media_sent=0xffffu; /* never a real value: media_bits sends the wanted bits next pass */
 }
+/* 1.6.0: the Local Weather channel is left (dir 0: B, the list; 1: Up, the next channel; -1: Down, the one before).
+ * Its fetch is stopped and its sound ends; the TV app starts once pj_wx_busy() says the fetch task is gone. */
+/* Sound only on the stock+media FPGA, told apart by its version message: the one place jf_sound is set from. */
+static void sound_from_fpga(void){jf_sound=rx.version_seen&&pj_fpga_media_audio(rx.version);}
+static void wx_leave(int dir) {
+    pj_wx_close();
+    if(wx_snd_on)pj_snd_stop();
+    wx_snd_on=0;jf_sound=0;wx_banner_until=0;
+    pj_jf_set_tv_resume(dir);
+    wx_mode=3;launcher.app_owns_media=0;launcher.app_pressed=0;launcher.redraw=1;
+}
 static void send_frame(void) {
     /* One transaction, reused: spi_device_transmit returns when the transfer is done, so the 45 static ones of
      * earlier launchers (about 1.8 KB of DRAM) were never in flight together. */
@@ -323,6 +352,18 @@ static int read_record(pj_prov2 *r) {
            pj_provision_current(a,a+PJ_PROV2_SIZE,PJ_PROV2_SIZE,r);
     memset(a,0,2*PJ_PROV2_SIZE);heap_caps_free(a);
     return ok;
+}
+/* 1.6.4: the apps record's flags (newest valid of the two copies), or PJ_APPS_DEFAULTS when none is valid or the
+ * flash or 64 bytes of heap were unavailable. Read only; written by Chromatic Manager and by the menu's Hide / Show
+ * hidden apps (pj_apps_commit in shared/provision_write.c). *found: a valid copy was there. */
+static uint32_t read_apps(int *found) {
+    uint8_t *a=heap_caps_calloc(2,PJ_APPS_SIZE,MALLOC_CAP_8BIT);pj_apps r={PJ_APPS_DEFAULTS,0};
+    *found=0;
+    if(!a)return PJ_APPS_DEFAULTS;
+    if(esp_flash_read(NULL,a,PJ_APPS_FLASH_A,PJ_APPS_SIZE)==ESP_OK&&esp_flash_read(NULL,a+PJ_APPS_SIZE,PJ_APPS_FLASH_B,PJ_APPS_SIZE)==ESP_OK)
+        *found=pj_apps_current(a,a+PJ_APPS_SIZE,PJ_APPS_SIZE,&r,NULL);
+    heap_caps_free(a);
+    return *found?r.flags:PJ_APPS_DEFAULTS;
 }
 /* A line for the Jellyfin screen with a network name cut to fit (the screen draws it at x=12; ".." when cut),
  * the way Setup fits names. The name stays on the screen only. */
@@ -669,6 +710,13 @@ void app_main(void) {
     }
     uint32_t now=now_ms();
     pj_launch_init(&launcher,now);
+    {   /* 1.6.4: which optional rows the menu shows, and whether TV lists the server's channels */
+        int found;uint32_t apps=read_apps(&found);
+        pj_launch_set_apps(&launcher,apps);
+        launcher.apps_writable=PJ_ENABLE_SETUP; /* Hide / Show hidden apps need the audited writer (built with the setup) */
+        snprintf(body,sizeof(body),"apps record=%d tv=%d tube=%d livetv=%d",found,(apps&PJ_APPS_TV)!=0,(apps&PJ_APPS_TUBE)!=0,
+                 (apps&PJ_APPS_LIVETV)!=0);diag(body);
+    }
     /* Which FPGA is this? Stock answers the version request once even with the overlay closed. The
      * stock+media build (debug bit, minor 40) then gets its media register before the first poke:
      * overlay allowed without a cartridge, the Menu button to us while our screen is up. Stock: nothing. */
@@ -734,6 +782,13 @@ void app_main(void) {
                 jf_press_at[b]=now;
             }
             if(keep&&pj_jf_active()&&launcher.phase==PJ_L_MEDIA)pj_jf_press(keep);
+            else if(keep&&wx_mode==2&&launcher.phase==PJ_L_MEDIA) { /* 1.6.0: the Local Weather channel: B the list, Up/Down the next channel */
+                if(keep&(PJ_BTN_B|PJ_BTN_MENU)){if(wx_only)wx_only=2;wx_leave(0);} /* 1.6.4: without Live TV, B is the start-up menu */
+                else if(wx_only&&(keep&(PJ_BTN_UP|PJ_BTN_DOWN))){} /* 1.6.4: no other channel without Live TV */
+                else if(keep&PJ_BTN_UP)wx_leave(1);
+                else if(keep&PJ_BTN_DOWN)wx_leave(-1);
+                else if(keep&(PJ_BTN_A|PJ_BTN_START|PJ_BTN_SELECT)){wx_banner_until=now+3000u;if(!wx_banner_until)wx_banner_until=1;wx_redraw=1;}
+            }
             else if(keep&&pj_jl_active()&&launcher.phase==PJ_L_MEDIA&&(keep&(PJ_BTN_B|PJ_BTN_MENU))) {
                 /* B (or Menu) on the Pocket link screen: the link mode ends, the cable is the game's again, Jellyfin returns */
                 plink_end();launcher.app_owns_media=0;launcher.app_pressed=0;launcher.redraw=1;
@@ -741,12 +796,26 @@ void app_main(void) {
             }
         }
         int jf_closing=pj_jf_poll(); /* frees the last session's memory once its tasks are gone */
+        int wx_leaving=pj_wx_poll(); /* 1.6.0: frees the weather state once its fetch task is gone */
         if(launcher.phase!=PJ_L_MEDIA) {
             menu_setup_wanted=0;plink_wanted=0;find_wanted=0;
+            if(!wx_mode)wx_only=0; /* 1.6.4: the next visit opens Local Weather again */
             if(pj_jl_active()){plink_end();launcher.app_owns_media=0;diag("plink end left-media");} /* never left running off its screen */
         }
 #if PJ_ENABLE_SETUP
         /* SETUP HOOK begin: the on-console setup while it is open (Select on the Jellyfin screen, app not running). */
+        /* 1.6.4: the start-up menu's Hide / Show hidden apps (launcher_logic.h): once its "Saving..." frame is on the screen,
+         * the apps record is written by the audited writer (its own two sectors only), read back, and the menu follows it. */
+        {
+            uint32_t want;
+            if(pj_apps_write_wanted(&launcher,&want)&&apps_shown_saving) {
+                apps_shown_saving=0;
+                int rc=pj_apps_commit(want); /* the apps record's one write */
+                pj_launch_apps_saved(&launcher,rc==PJ_PROV_WRITE_OK||rc==PJ_PROV_WRITE_NO_CHANGE,want,now_ms());
+                snprintf(body,sizeof(body),"apps write=%d tv=%d tube=%d livetv=%d",rc,(want&PJ_APPS_TV)!=0,(want&PJ_APPS_TUBE)!=0,
+                         (want&PJ_APPS_LIVETV)!=0);diag(body);
+            }
+        }
         _Static_assert((int)JOIN_FAILED==(int)PJ_SU_JOIN_FAILED&&(int)JOIN_CONNECTED==(int)PJ_SU_JOIN_CONNECTED&&(int)JOIN_JOINING==(int)PJ_SU_JOIN_JOINING,"join states");
         if(launcher.phase!=PJ_L_MEDIA)setup_refused=0;
         /* The Jellyfin menu's "Wi-Fi & sign-in" row: the app has closed and let go of its memory; now Setup opens. */
@@ -830,7 +899,8 @@ void app_main(void) {
          * could not fix): only with the Jellyfin app gone (its sockets and tasks are the network's users), the LAN
          * task gone and its CHR1 session closed, then the radio task takes the driver down and up again. */
         if(rejoin_wanted&&!radio_running&&!pj_jf_active()&&!pj_jl_active()&&!jf_closing&&!PJ_SETUP_IS_BUSY&&(int32_t)(now-rejoin_retry_at)>=0) {
-            if(lan_alive)lan_quit=1; /* asked to leave; waited for below */
+            if(pj_wx_busy())pj_wx_pause(1); /* 1.6.0: the weather fetch uses the network too: stopped, and waited for here */
+            else if(lan_alive)lan_quit=1; /* asked to leave; waited for below */
             else {
                 if(lan_rx||lan_tx){pj_rmt_lan_closed(&rmt);lan_opened=lan_closed=lan_close_request=0;lan_connected=0;}
                 if(lan_rx){vStreamBufferDelete(lan_rx);lan_rx=NULL;}
@@ -884,11 +954,15 @@ void app_main(void) {
             media_bits(media_fpga?(uint16_t)(PJ_MEDIA_OVERLAY|(ours?PJ_MEDIA_MENU:0)|(jf_sound?PJ_MEDIA_AUDIO:0)):0);
         }
         if(action.poke)send_fpga(PJ_TX_POKE,action.poke_value);
-        /* 1.3.6: not in the one or two passes between the link's request for the fast UART and the
+        /* 1.3.6 (second review): not in the one or two passes between the link's request for the fast UART and the
          * MCU's own change of rate: the bridge may be at the new rate already and this would reach it at the old one.
          * The next request follows 100 ms later; the gateway ends that state within 200 ms whatever happens. */
         if(action.request_buttons&&!pj_jl_rate_changing())send_fpga(PJ_TX_BUTTONS_REQUEST,0);
         if(action.restart_to_stock) {
+            /* 1.6.0 (review H2): with TV or ChromaTube open, the server closes owed for what was playing are sent
+             * first, for at most 1.5 s (each is one small request on the kept connection); Jellyfin: nothing. */
+            for(uint32_t t0=now_ms();pj_jf_settle(now_ms())&&(uint32_t)(now_ms()-t0)<1500u;){feed_watchdog();vTaskDelay(1);}
+            if(wx_mode==2)wx_leave(0);
             /* Sessions end and the radio goes off before stock runs. The Pocket link first (1.3.0): its keyed leave hands
              * the cable back to the game core and the UART is back at 115,200 before anything else is sent. */
             if(pj_jl_active())plink_end();
@@ -922,23 +996,70 @@ void app_main(void) {
             }
         }
         if(launcher.phase!=PJ_L_MEDIA)jf_failed=0; /* opening Media again gets fresh tries */
+        /* ---- 1.6.0: the Local Weather channel (wx_mode) ---- */
+        /* Its cache goes when anything but TV is about to take the heap. */
+        if(launcher.phase==PJ_L_MEDIA&&(launcher.media_app!=PJ_APP_TV||PJ_SETUP_IS_OPEN||menu_setup_wanted||plink_wanted))pj_wx_forget();
+        if(wx_mode&&launcher.phase!=PJ_L_MEDIA){if(wx_mode==2)wx_leave(0);wx_mode=0;launcher.app_owns_media=0;} /* left by another way (the remote's menu) */
+        /* 1.6.4: TV without Live TV opens straight to the channel once Wi-Fi has joined: no TV app, no server request */
+        if(pj_tv_weather_start_wanted(&launcher,record_wifi&&wifi_state==2,wx_only!=0,
+                                      wx_mode||wx_leaving||pj_wx_busy()||pj_jf_active()||jf_closing||PJ_SETUP_IS_OPEN||
+                                      menu_setup_wanted||rejoin_wanted||plink_wanted||pj_jl_active()||radio_running)) {
+            wx_only=1;wx_mode=1;launcher.redraw=1;diag("weather only (no live tv)");
+        }
+        if(wx_mode==1&&!pj_jf_active()&&!jf_closing&&!wx_leaving) { /* the TV app's memory is back */
+            int opened=pj_wx_open();
+            if(opened==0) {
+                wx_mode=2;wx_redraw=1;wx_snd_on=0;wx_snd_try_ms=now;wx_diag_ms=now;
+                wx_banner_until=now+3000u;if(!wx_banner_until)wx_banner_until=1;
+                wx_enter(pj_wx_state(),now);
+                launcher.app_owns_media=1;launcher.app_pressed=0; /* B, Up and Down are the channel's */
+                sound_from_fpga(); /* the FPGA plays the I2S stream: media_bits says so next pass */
+            } else if(opened!=-6){wx_mode=3;strcpy(radio_line,"Weather: not enough memory");launcher.redraw=1;} /* back to TV */
+            snprintf(body,sizeof(body),"weather open=%d heap=%lu block=%lu",opened,(unsigned long)esp_get_free_heap_size(),
+                     (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL));
+            if(opened!=-6)diag(body);
+        }
+        if(wx_mode==2&&pj_wx_state()) {
+            pj_wx_pause(rejoin_wanted||radio_running);
+            pj_wx_service(now,wifi_state==2);
+            if(wx_tick(pj_wx_state(),now,pj_wx_epoch()))wx_redraw=1;
+            if(wx_banner_until&&(int32_t)(now-wx_banner_until)>=0){wx_banner_until=0;wx_redraw=1;}
+            if(jf_sound) { /* its sound, through the videos' sink; a sink that will not start within 4 s: silent */
+                if(!wx_snd_on&&(uint32_t)(now-wx_snd_try_ms)<4000u&&pj_snd_start(WX_AUDIO_RATE)==0)wx_snd_on=1;
+                if(wx_snd_on)wx_audio_feed(pj_wx_state(),now,pj_snd_write,NULL);
+            }
+            if((uint32_t)(now-wx_diag_ms)>=5000u) {
+                wx_diag_ms=now;pj_wx_diag(body,sizeof(body));diag(body);
+                snprintf(body,sizeof(body),"weather heap=%lu heap-min=%lu block=%lu sound=%d",(unsigned long)esp_get_free_heap_size(),
+                         (unsigned long)esp_get_minimum_free_heap_size(),
+                         (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL),wx_snd_on);diag(body);
+            }
+        }
+        if(wx_mode==3&&!pj_wx_busy()){wx_mode=0;launcher.redraw=1;} /* its fetch task and connection are gone: TV may start */
+        if(!wx_mode&&wx_only==2&&launcher.phase==PJ_L_MEDIA){wx_only=0;pj_launch_enter(&launcher,PJ_L_MENU,now);launcher.redraw=1;} /* 1.6.4: B left it */
+        if(!pj_jf_active())pj_snd_service(); /* a stopped sound channel, a finished sound task's ring: given back */
         /* Not under an open setup: it holds its own memory and the buttons until it is closed. */
-        if(launcher.phase==PJ_L_MEDIA&&record_jellyfin&&wifi_state==2&&!pj_jf_active()&&!jf_closing&&!PJ_SETUP_IS_OPEN&&!menu_setup_wanted&&!rejoin_wanted&&
+        if(launcher.phase==PJ_L_MEDIA&&pj_media_app_allowed(&launcher)&&record_jellyfin&&wifi_state==2&&!pj_jf_active()&&!jf_closing&&!PJ_SETUP_IS_OPEN&&!menu_setup_wanted&&!rejoin_wanted&&
            !plink_wanted&&!pj_jl_active()&&(int32_t)(now-plink_hold_until)>=0&&
-           jf_failed<3&&(!jf_failed||(int32_t)(now-jf_retry_at)>=0)) {
+           jf_failed<3&&(!jf_failed||(int32_t)(now-jf_retry_at)>=0)&&!wx_mode&&!wx_leaving&&!pj_wx_busy()) {
             plink_refused=0;
+            pj_jf_set_mode(launcher.media_app); /* 1.6.0: Jellyfin, TV or ChromaTube, as the start-up menu row said */
             pj_jf_set_pocket_link(link_fpga()); /* 1.3.0: the menu offers Pocket link only on the link FPGA */
             /* Sound only on the stock+media FPGA, told apart by its version message (debug bit, minor 40);
              * on stock the stream and behaviour are exactly as before. The media bit also mutes the
              * hidden cartridge while Jellyfin is open; stock ignores the address. */
-            jf_sound=rx.version_seen&&pj_fpga_media_audio(rx.version);
+            sound_from_fpga();
             int started=pj_jf_begin(&jf_creds,frame,now,jf_sound);
             if(started!=-6) { /* -6: the last session is still letting go, try next pass */
                 snprintf(body,sizeof(body),"jellyfin begin=%d heap=%lu sound=%d",started,(unsigned long)esp_get_free_heap_size(),jf_sound);diag(body);
                 if(started==0){jf_failed=0;launcher.app_owns_media=1;launcher.app_pressed=0;jf_last_stats=now;} /* media_bits sends the sound bit next pass */
                 else { /* up to 3 tries, 2 s apart (memory freed by a closing task may come back) */
                     jf_failed++;jf_retry_at=now+2000u;
-                    strcpy(radio_line,started==-5||started==-2?"Jellyfin: not enough memory":"Jellyfin could not start");launcher.redraw=1;
+                    { /* 1.6.0: said in the name of the row that was opened (Jellyfin's two lines are unchanged) */
+                        const char *who=launcher.media_app==PJ_APP_TV?"TV":launcher.media_app==PJ_APP_TUBE?"ChromaTube":"Jellyfin";
+                        snprintf(radio_line,sizeof(radio_line),started==-5||started==-2?"%s: not enough memory":"%s could not start",who);
+                    }
+                    launcher.redraw=1;
                 }
             }
         }
@@ -946,6 +1067,7 @@ void app_main(void) {
             int to_setup=PJ_ENABLE_SETUP&&pj_jf_exit_to_setup(); /* the menu's "Wi-Fi & sign-in" row: Setup once the app has let go */
             int to_find=PJ_ENABLE_SETUP&&pj_jf_exit_to_find();   /* 1.3.0: "Can't reach": Find my server again */
             int to_plink=pj_jf_exit_to_plink()&&link_fpga();      /* 1.3.0: the menu's "Pocket link" row (link FPGA only) */
+            int to_weather=pj_jf_exit_to_weather();               /* 1.6.0: TV's Local Weather row */
             pj_jf_end();
             jf_sound=0; /* media_bits drops the sound bit next pass; the overlay and Menu bits stay ours */
             snprintf(body,sizeof(body),"jellyfin end heap=%lu setup=%d",(unsigned long)esp_get_free_heap_size(),to_setup);diag(body);
@@ -953,6 +1075,7 @@ void app_main(void) {
             if(to_find){snprintf(body,sizeof(body),"jellyfin find-server");diag(body);}
             if(to_setup||to_find){menu_setup_wanted=1;find_wanted=to_find;} /* stays on the Jellyfin screen ("Opening Setup..."); the hook opens Setup once the app has let go */
             else if(to_plink)plink_wanted=1; /* "Opening Pocket link..."; it starts once the app's memory is back */
+            else if(to_weather){wx_mode=1;launcher.redraw=1;} /* "Opening Local Weather..."; opened once the app's memory is back */
             else pj_launch_enter(&launcher,PJ_L_MENU,now);
         }
         /* 1.3.0: the Pocket link starts once the app has let go (pj_jf_poll freed it), on the link FPGA only. */
@@ -1066,7 +1189,7 @@ void app_main(void) {
         if(was_pairing&&!rmt.pairing)launcher.redraw=1; /* the menu comes back after pairing */
         was_pairing=rmt.pairing;
         static int rmt_had_screen;
-        {int owns=pj_rmt_owns_screen(&rmt);if(rmt_had_screen&&!owns)pj_jf_invalidate();rmt_had_screen=owns;}
+        {int owns=pj_rmt_owns_screen(&rmt);if(rmt_had_screen&&!owns){pj_jf_invalidate();wx_redraw=1;}rmt_had_screen=owns;}
         if(pj_rmt_owns_screen(&rmt)) {
             launcher.redraw=0; /* the menu stays hidden under the pairing or service screen */
             if(rmt.pairing) {
@@ -1088,6 +1211,17 @@ void app_main(void) {
                 launcher.redraw=0;pj_jl_view(&plink_shown,now);plink_drawn_ms=now;
                 pj_plink_draw(frame,&plink_shown,now,pj_font_alpha,pj_font_advance);send_frame();
             }
+        } else if(wx_mode==2&&launcher.phase==PJ_L_MEDIA&&!launcher.close_hint&&pj_wx_state()) { /* 1.6.0: the Local Weather channel */
+            launcher.redraw=0;
+            if(wx_redraw) {
+                wx_redraw=0;
+                wx_draw(pj_wx_state(),frame,now,pj_wx_epoch());
+                if(wx_banner_until) { /* number and name for a moment, as on every channel */
+                    if(wx_only)pj_wx_banner_keys(frame,"B: back",pj_font_alpha,pj_font_advance); /* 1.6.4: no other channel */
+                    else pj_wx_banner(frame,pj_font_alpha,pj_font_advance);
+                }
+                send_frame();
+            }
         } else if(pj_jf_active()&&launcher.phase==PJ_L_MEDIA&&!launcher.close_hint) {
             launcher.redraw=0;
             if(pj_jf_tick(frame,now))send_frame();
@@ -1105,24 +1239,42 @@ void app_main(void) {
                     menu_setup_wanted?"Opening Setup...":
                     plink_wanted?"Opening Pocket link...":
                     plink_refused==1?"Pocket link: not enough memory":plink_refused?"Pocket link could not start":
-                    !record_wifi?"Select: set up Wi-Fi here":!record_jellyfin?"Select: sign in to Jellyfin":
+                    !record_wifi?"Select: set up Wi-Fi here":!record_jellyfin&&pj_media_needs_sign_in(&launcher)?"Select: sign in to Jellyfin":
                     link_lost||rejoin_wanted||wifi_state==1?"Back in a moment":
-                    wifi_state==3?"Select: check Wi-Fi settings":"Opening Jellyfin..."};
+                    wifi_state==3?"Select: check Wi-Fi settings":wx_mode==1?"Opening Local Weather...":
+                    pj_tv_weather_only(&launcher)?(wx_only?"Local Weather did not open":"Opening Local Weather..."): /* 1.6.4 */
+                    launcher.media_app==PJ_APP_TV?"Opening TV...":launcher.media_app==PJ_APP_TUBE?"Opening ChromaTube...":"Opening Jellyfin..."};
+                int busy_line=setup_refused||menu_setup_wanted||plink_wanted||plink_refused; /* 1.6.4: these lines first */
 #else
             else if(launcher.phase==PJ_L_MEDIA) {
                 const char *const lines[3]={radio_line,wifi_state==2?remote_line:
                     pairing?"Paired with PC":"Remote Pilot: USB",
                     plink_wanted?"Opening Pocket link...":
                     plink_refused==1?"Pocket link: not enough memory":plink_refused?"Pocket link could not start":
-                    !record_wifi?"Set up Wi-Fi in Chromatic Manager":!record_jellyfin?"Link Jellyfin in Chromatic Manager":
+                    !record_wifi?"Set up Wi-Fi in Chromatic Manager":!record_jellyfin&&pj_media_needs_sign_in(&launcher)?"Link Jellyfin in Chromatic Manager":
                     link_lost||rejoin_wanted||wifi_state==1?"Back in a moment":
-                    wifi_state==3?"Jellyfin needs Wi-Fi":"Opening Jellyfin..."};
+                    wifi_state==3?"Jellyfin needs Wi-Fi":wx_mode==1?"Opening Local Weather...":
+                    pj_tv_weather_only(&launcher)?(wx_only?"Local Weather did not open":"Opening Local Weather..."): /* 1.6.4 */
+                    launcher.media_app==PJ_APP_TV?"Opening TV...":launcher.media_app==PJ_APP_TUBE?"Opening ChromaTube...":"Opening Jellyfin..."};
+                int busy_line=plink_wanted||plink_refused;
 #endif
-                pj_launch_draw_media(frame,lines,pj_font_alpha,pj_font_advance);
+                /* 1.6.4: TV and ChromaTube not (yet) set up: their own friendly page, what is missing and the next step */
+                unsigned notice=busy_line?PJ_NOTICE_NONE:
+                    pj_media_notice(&launcher,record_wifi,record_jellyfin,wifi_state,link_lost||rejoin_wanted);
+                /* 1.6.0: TV and ChromaTube open under their own name and icon */
+                if(notice)pj_launch_draw_notice(frame,&launcher,notice,PJ_ENABLE_SETUP,pj_font_alpha,pj_font_advance);
+                else if(launcher.media_app!=PJ_APP_JELLYFIN&&(!strncmp(lines[2],"Opening ",8)||!strcmp(lines[2],"Local Weather did not open"))&&
+                   strcmp(lines[2],"Opening Setup...")&&strcmp(lines[2],"Opening Pocket link..."))
+                    pj_launch_draw_opening(frame,launcher.media_app==PJ_APP_TV?PJ_ITEM_TV:PJ_ITEM_TUBE,lines[2],
+                                           strstr(radio_line,"memory")||strstr(radio_line,"could not start")?radio_line:NULL,pj_font_alpha,pj_font_advance);
+                else pj_launch_draw_media(frame,lines,pj_font_alpha,pj_font_advance);
             } else if(launcher.phase==PJ_L_OTHER)pj_launch_draw_other(frame,&launcher,pj_font_alpha,pj_font_advance);
             else if(launcher.credits_open)pj_launch_draw_credits(frame,pj_font_alpha,pj_font_advance);
             else pj_launch_draw_menu(frame,&launcher,now,pj_font_alpha,pj_font_advance);
             send_frame();
+            /* 1.6.4: the Hide / Show question's "Saving..." is on the screen now: its write runs on the next pass */
+            apps_shown_saving=(launcher.phase==PJ_L_MENU||launcher.phase==PJ_L_OTHER)&&!launcher.close_hint&&launcher.apps_prompt&&
+                              launcher.apps_stage==PJ_AS_SAVE;
         }
         /* Outside a USB session only short text lines are owed: send them whole. */
         chr1_t0=esp_timer_get_time();

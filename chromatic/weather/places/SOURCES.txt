@@ -1,0 +1,40 @@
+us-places.txt.gz: the table Chromatic Manager looks a weather location up in, on the PC.
+
+Made by chromatic/weather/tools/make_places.py from two files of the US Census Bureau's 2024
+Gazetteer, downloaded 2026-11-20. Census Bureau data are works of the US Government and in the
+public domain (17 U.S.C. 105).
+
+  https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteer/2024_Gaz_zcta_national.zip
+    1,013,803 bytes, sha256 7b85c04a131672f58b38a950eb82855d5fd4054f0bd9bc3f69aa28897a714e3d
+  https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteer/2024_Gaz_place_national.zip
+    1,221,402 bytes, sha256 cf262fc92b2326f7a8c62a89d156a60eb17d64d6d35f7a62310c43bb08972c06
+
+Kept: 33,791 ZIP Code Tabulation Areas (code and internal point) and 32,333 places (state, name
+without the Census kind, internal point), coordinates to 2 decimals.
+us-places.txt.gz: 517,300 bytes, sha256 7544ae234f3295302bb739f2a6c3a14351b2a2a034bc1c55186de06dc100a986
+
+ZIP Code Tabulation Areas approximate USPS ZIP codes; a few ZIP codes (post-office boxes, single
+buildings) have none. Looking a place up sends nothing anywhere; only the chosen point is then sent
+to api.weather.gov.
+
+us-states.txt.gz: every state's outline, for the location pack maker (scripts/make_location_pack.py).
+
+Made by chromatic/weather/tools/make_states.py from the US Census Bureau's cartographic boundary file of
+the states at 1:20,000,000 (2023), downloaded once on 2026-11-20. Census Bureau data are works of the US
+Government and in the public domain (17 U.S.C. 105).
+
+  https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_20m.zip
+    186,432 bytes, sha256 0fd2d6562708ff8182c00d5d25b5556d049ecf2794d97b89ed2dac4d5e9e2c8d
+
+Kept: 52 states (with DC and PR), 102 rings, 6,975 points: rings simplified to 0.01 degree and rounded to
+0.01 degree; islands under 0.02 square degrees left out.
+us-states.txt.gz: 29,362 bytes, sha256 4be465cba6cefa5c53e6e6bf82a3ab5e42acb7a3551f3822ec6e6e8cfc5a1bcb
+
+us-town-sizes.txt.gz: each place's land area, which the location pack maker (scripts/make_location_pack.py)
+uses to choose the larger towns near a place (the bundled tables hold no population).
+
+Made by chromatic/weather/tools/make_town_sizes.py from the same 2024 Gazetteer place file as us-places.txt.gz
+(2024_Gaz_place_national.zip above, same SHA-256; public domain). Kept: 14,895 places of 2 square miles of
+land or more (6,339 of them census-designated places, which the maker counts at a third): state, name, internal
+point, land area in square miles, kind.
+us-town-sizes.txt.gz: 179,454 bytes, sha256 fac425ee9cee528bc70438f689efe9d10593d033972107b0e52ccb6b9da2d23d

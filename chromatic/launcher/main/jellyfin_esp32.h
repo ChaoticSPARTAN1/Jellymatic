@@ -44,6 +44,22 @@ int pj_jf_poll(void);   /* call every loop: 1 while the last session is still le
  * "Pocket link" (call before pj_jf_begin). pj_jf_exit_to_find / _plink: the app is leaving for Setup's "Find my
  * server again" / for the Pocket link screen. */
 void pj_jf_set_pocket_link(int on);
+/* Launcher 1.6.0: which app the next pj_jf_begin starts (launcher_logic.h PJ_APP_* = jf_app.h JF_MODE_*): Jellyfin (0,
+ * as before), TV (live channels, with the Local Weather channel when weather_esp32.c has a state), ChromaTube. */
+void pj_jf_set_mode(int mode);
+/* TV only. pj_jf_exit_to_weather: the app is leaving because the Local Weather row was chosen (the launcher shows
+ * that channel itself, with the app's memory free for its HTTPS fetch). pj_jf_set_tv_resume: how the next TV start
+ * comes back from it: 0 the list, 1 the next channel (Up), -1 the one before (Down).
+ * pj_jf_settle: see jellyfin_esp32.c; called in a short bounded loop before the hand-over to Games.
+ * pj_snd_*: the videos' sound path for the launcher's Local Weather screen (no app in memory). */
+int pj_jf_exit_to_weather(void);
+void pj_jf_set_tv_resume(int dir);
+int pj_jf_settle(uint32_t now);
+int pj_snd_start(uint32_t rate);
+size_t pj_snd_write(void *ctx,const uint8_t *adpcm,size_t size,int block_start);
+void pj_snd_service(void);
+void pj_snd_stop(void);
+int pj_snd_alive(void);
 int pj_jf_exit_to_find(void);
 int pj_jf_exit_to_plink(void);
 /* The Pocket link gateway (shared/pocket_link.h), mutually exclusive with the app: same tasks and buffers, never both.
@@ -54,7 +70,7 @@ int pj_jf_exit_to_plink(void);
 struct pj_plink_status_s;
 int pj_jl_begin(const pj_jf_creds *c,uint32_t now);
 int pj_jl_active(void);
-/* 1.3.6: 1 for the one or two loop passes between the link's request for the fast UART and the MCU's
+/* 1.3.6 (second review): 1 for the one or two loop passes between the link's request for the fast UART and the MCU's
  * own change of rate (at most 200 ms): nothing else may be sent to the FPGA meanwhile. */
 int pj_jl_rate_changing(void);
 void pj_jl_rx(const uint8_t *bytes,int n,uint32_t now);

@@ -62,5 +62,7 @@ See [Recovery](Recovery.md).
 
 - Tested on the PC with simulators and on one console; your link cable and Pocket may behave differently.
 - The link speed is limited by the cable: picture size and frame rate on the Pocket are small.
+- The Pocket link is offered from the **Jellyfin** row only. TV (Local Weather, live channels) and ChromaTube are on
+  the Chromatic only; start-up menu 1.6 left the link itself unchanged.
 
 Next: [Remote Pilot](Remote-Pilot.md)

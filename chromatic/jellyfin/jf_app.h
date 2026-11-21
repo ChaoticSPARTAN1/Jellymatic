@@ -131,9 +131,98 @@
 /* Launcher 1.3.0: JF_EXIT_FIND opens Setup straight at "Find my server again" (the error screen's Select when the
  * server could not be reached), JF_EXIT_PLINK leaves for the launcher's Pocket link screen (the menu row exists only
  * when the FPGA has the link bridge, jf_config.pocket_link). */
-enum {JF_EXIT_MENU,JF_EXIT_SETUP,JF_EXIT_FIND,JF_EXIT_PLINK};
+enum {JF_EXIT_MENU,JF_EXIT_SETUP,JF_EXIT_FIND,JF_EXIT_PLINK,
+      JF_EXIT_WEATHER}; /* 1.6.0, TV: the Local Weather row was chosen: the launcher shows that channel, then starts TV again */
 /* What the error screen's Select offers: nothing, Find my server again, or sign in again in Setup. */
 enum {JF_ERR_OTHER,JF_ERR_UNREACHABLE,JF_ERR_SIGNIN};
+
+/* Launcher 1.6.0: two more apps on this same code, chosen by the launcher's start-up menu (jf_config.mode).
+ *  - JF_MODE_TV: live TV channels of the owner's Jellyfin server. A channel list (GET /LiveTv/Channels, JF_TV_PAGE
+ *    a page, no images, no user data, no programme), A tunes: POST /Items/{id}/PlaybackInfo with AutoOpenLiveStream
+ *    opens the channel and names its media source and live stream; the usual stream.avi then carries liveStreamId
+ *    and no startTimeTicks. Leaving a channel closes the stream, then DELETE /Videos/ActiveEncodings (this stream's
+ *    playSessionId), then POST /LiveStreams/Close, in that order, before anything else is opened. No playback
+ *    reports (no watch history), no pause, no seek, no reconnect: a channel that ends, fails, stalls or never sends
+ *    a picture shows "No signal" and returns to the list. Up/Down while watching step to the next channel; the tune
+ *    starts JF_TV_SURF_MS after the last press, and the same channel is never opened again within
+ *    JF_TV_REOPEN_MS of its close (its conversion takes that long to go).
+ *    With jf_config.wx_row the list starts with the built-in Local Weather row. That channel is not played here:
+ *    choosing it leaves the app (JF_EXIT_WEATHER) and the launcher shows it with this app's memory given back
+ *    (its HTTPS fetch does not fit beside the app); jf_config.tv_resume says how the app comes back from it.
+ *  - JF_MODE_TUBE: the ordinary browser rooted at the library named JF_TUBE_LIBRARY (found by name among the
+ *    user's views). Its videos are remote streams the server only knows the size and sound of after
+ *    PlaybackInfo, so Play asks that first (same body) and uses the media source it names. No seek, no reopen at
+ *    a position (startTimeTicks is not proven for remote videos): a video plays from its beginning in one stream.
+ *  - JF_MODE_JELLYFIN (0): everything exactly as before 1.6.0: no PlaybackInfo, the same paths byte for byte.
+ * Review of 1.6.0 (docs/Design-notes.md), the fixes here:
+ *  - B1: TV and ChromaTube ask for JF_RATE_START_TV (500 kbit/s, the rate the console's link is proven to carry),
+ *    in videoBitRate and in PlaybackInfo's MaxStreamingBitrate, and never more. ChromaTube never reopens. TV may
+ *    step down once in a session (JF_RATE_LOW_TV) when the link starves: the channel is closed and tuned again
+ *    under the reopen rule.
+ *  - H2: PlaybackInfo's reply is not kept: the two ids are read from it as it arrives (jf_pi_feed), whatever its
+ *    size, so a live stream the server opened is closed even when the reply is cut short, too long for the
+ *    console's use, or nobody waits for it any more.
+ *  - M1/M2: pictures of a faster-than-asked stream are thinned by count of pictures delivered, up to one in 8.
+ * Measured on the owner's server after the second review pass (2026-11-19, videoBitRate=500000, maxFramerate=15,
+ * PlaybackInfo first): a live channel's AVI header says 15.0 pictures a second at 160x90, and by the stream's own
+ * time it carries 70-83 KB a second with sound; the server does keep to the cap and, within about 20%, to the bit
+ * rate. It sends the first seconds faster than real time (its backlog: 25-26 pictures a wall second at first), which
+ * is what the earlier "24 a second" was. A ChromaTube video: 15.00 a second, about 21 KB a second. So:
+ *  - N1: these are 15-a-second streams like the Jellyfin row's, and are paced exactly like them (the stream's own
+ *    time, read at the player's pace, TCP holding the server back): every picture shown. The thinning, the
+ *    "sound first" skip and the sink's refill loop are a guard for a stream whose HEADER says more than the cap
+ *    asked (jf_thin > 1, thin_on); they never look at how fast bytes arrive.
+ *  - TV asks for JF_RATE_START_TV, 400 kbit/s (83 KB/s at 500 is close to the console's 100 KB/s link);
+ *    ChromaTube for JF_RATE_START_TUBE, 500 kbit/s.
+ *  - N3: TV's step down needs two starved 5 s windows in a row with pictures still coming, and holds for that
+ *    channel only: the next channel starts at 400 again.
+ *  - A channel whose pictures stop while its sound goes on (seen in the measurement) is "No signal" after
+ *    JF_TV_STALL_MS, with the closes; it is not a slow link.
+ *  - N4: a PlaybackInfo nobody waits for any more is given up by the platform after a short grace
+ *    (jf_app_request_unwanted), so the next action is not held for up to 30 s. */
+enum {JF_MODE_JELLYFIN,JF_MODE_TV,JF_MODE_TUBE};
+enum {JF_TV_RESUME_NONE,JF_TV_RESUME_NEXT,JF_TV_RESUME_PREV}; /* back from the Local Weather channel: by B, by Up, by Down */
+enum {JF_TV_ERR_NONE,JF_TV_ERR_UNREACHABLE,JF_TV_ERR_SIGNIN,JF_TV_ERR_OTHER}; /* why the channel list is not there */
+#define JF_TUBE_LIBRARY "ChromaTube"
+/* 1.6.4: what an owner who has not (or only half) set up Live TV or ChromaTube sees: plain words and where to go next,
+ * never a bare error (docs/Apps-on-the-start-up-menu.md, "What you see before setup"). */
+#define JF_MSG_TV_NONE "No Live TV channels yet."
+#define JF_MSG_TV_NONE_STEP "Add them in Chromatic Manager: Settings > Live TV channels."
+#define JF_MSG_TV_UNREACHABLE "Your Jellyfin server isn't answering. Local Weather still works."
+#define JF_MSG_TV_RETRYING "Your Jellyfin server isn't answering. Trying again..."
+#define JF_MSG_TUBE_MISSING "ChromaTube isn't set up on your server"
+#define JF_MSG_TUBE_MISSING_STEP "Set it up in Chromatic Manager: Settings > ChromaTube server"
+#define JF_MSG_TUBE_EMPTY "No channels in ChromaTube yet"
+#define JF_MSG_TUBE_EMPTY_STEP "Add channels in Chromatic Manager: Settings > ChromaTube server. New videos can take a few minutes to appear."
+#define JF_MSG_TUBE_DOWN "Your ChromaTube server isn't answering"
+#define JF_MSG_TUBE_DOWN_STEP "Check that it is running at home, then A: try again."
+#define JF_RATE_START_TV 400000u   /* TV: asked for, and never more */
+#define JF_RATE_START_TUBE 500000u /* ChromaTube: asked for, and never more */
+#define JF_RATE_START_MODE(a) ((a)->cfg.mode==JF_MODE_TV?JF_RATE_START_TV:JF_RATE_START_TUBE)
+#define JF_RATE_LOW_TV 250000u   /* TV: the one step down of a session */
+#define JF_TV_PAGE 7u            /* channels per list page (with the built-in channel: 8 rows on the first) */
+#define JF_TV_SURF_MS 1500u      /* Up/Down while watching: the tune starts this long after the last press */
+#define JF_TV_REOPEN_MS 10000u   /* the same channel is not opened again sooner after its close */
+#define JF_TV_BANNER_MS 3000u    /* number and name under the picture after a tune */
+#define JF_TV_FIRST_MS 20000u    /* no first picture this long after the stream was asked for: No signal */
+#define JF_TV_STALL_MS 20000u    /* no picture for this long while watching (the sound may go on): No signal */
+#define JF_TV_NOSIGNAL_MS 3000u  /* "No signal" stays this long, then the list */
+#define JF_TV_EXIT_MS 6000u      /* leaving the list waits at most this long for the server closes to go out */
+#define JF_SOURCE_ID 65u         /* PlaybackInfo's media source id, already URL-encoded */
+#define JF_LIVE_ID 161u          /* its live stream id, already URL-encoded; a longer one is closed at once, not played */
+#define JF_PI_ID_RAW 256u        /* where the reply scanner keeps the two ids while the reply arrives: in the */
+#define JF_PI_LIVE_RAW 768u      /* app's own buffer (free then: nothing else is asked or played), raw, then escaped */
+#define JF_TV_WX_NUMBER "WX"
+#define JF_TV_WX_NAME "LOCAL WEATHER"
+enum {JF_TV_IDLE,JF_TV_SURF,JF_TV_WAIT,JF_TV_OPENING,JF_TV_PLAYING,JF_TV_NOSIGNAL};
+enum {JF_CLOSE_NONE,JF_CLOSE_ENCODING,JF_CLOSE_ENCODING_OUT,JF_CLOSE_LIVE,JF_CLOSE_LIVE_OUT};
+/* The proven request (measured on a real server: docs/Design-notes.md), with the bit
+ * rate asked for and the sound the stream request will name (review M6: without the FPGA's sound the stream asks
+ * for MP3 as the Jellyfin row does, and so does this profile). */
+#define JF_PLAYINFO_BODY "{\"UserId\":\"%s\",\"AutoOpenLiveStream\":true,\"EnableDirectPlay\":false,\"EnableDirectStream\":false," \
+    "\"EnableTranscoding\":true,\"MaxStreamingBitrate\":%u,\"DeviceProfile\":{\"Name\":\"Chromatic\",\"MaxStreamingBitrate\":%u," \
+    "\"DirectPlayProfiles\":[],\"TranscodingProfiles\":[{\"Container\":\"avi\",\"Type\":\"Video\",\"VideoCodec\":\"mjpeg\"," \
+    "\"AudioCodec\":\"%s\",\"Protocol\":\"http\",\"Context\":\"Streaming\"}]}}"
 
 /* Buttons, same bits as the launcher's FPGA button message (launcher_logic.h). */
 #define JF_BTN_START  (1u<<0)
@@ -162,16 +251,19 @@ typedef struct {
 typedef struct {char title[28];uint8_t shape,count,focus;jf_item items[JF_ROW_ITEMS];} jf_row;
 typedef struct {uint8_t shape,count,focus;jf_item items[JF_PAGE_ITEMS];} jf_page;
 
-enum {JF_S_CONNECT,JF_S_HOME,JF_S_FOLDER,JF_S_DETAILS,JF_S_PLAYER,JF_S_ERROR,JF_S_EXIT,JF_S_MENU};
+enum {JF_S_CONNECT,JF_S_HOME,JF_S_FOLDER,JF_S_DETAILS,JF_S_PLAYER,JF_S_ERROR,JF_S_EXIT,JF_S_MENU,
+      JF_S_CHANNELS}; /* 1.6.0, TV only: the channel list */
 /* What jf_app_draw paints after a tick: everything, or only the focused card's scrolling name. */
 enum {JF_DRAW_FULL,JF_DRAW_LABEL};
 /* What the one outstanding request is for. */
 enum {JF_R_NONE,JF_R_VIEWS,JF_R_RESUME,JF_R_NEXTUP,JF_R_LATEST,JF_R_FOLDER,JF_R_DETAILS,JF_R_IMAGE,
-      JF_R_STREAMS,JF_R_PLAYING,JF_R_PROGRESS,JF_R_STOPPED};
+      JF_R_STREAMS,JF_R_PLAYING,JF_R_PROGRESS,JF_R_STOPPED,
+      JF_R_CHANNELS,JF_R_PLAYINFO,JF_R_ENCODING_STOP,JF_R_LIVE_CLOSE}; /* 1.6.0 */
 
 typedef struct {
     void *ctx;
-    /* Starts one HTTP request (GET when method is NULL, else "POST" with a JSON body). The
+    /* Starts one HTTP request (GET when method is NULL, else "POST" with a JSON body; 1.6.0: "POST" with no
+     * body, and "DELETE", for the TV app's closes). The
      * path starts with '/' and is relative to the server URL; the platform adds the
      * Authorization header. Returns 0 when started; the platform then passes the body to
      * jf_app_reply_data and finishes with jf_app_reply exactly once. */
@@ -210,6 +302,9 @@ typedef struct {
     void *scratch;uint32_t scratch_bytes;
     const unsigned char *font_alpha,*font_advance;
     uint8_t pocket_link;                  /* 1.3.0: the FPGA has the link bridge (18.41): the menu offers "Pocket link" */
+    uint8_t mode;                         /* 1.6.0: JF_MODE_*: Jellyfin (0, as before), TV, ChromaTube */
+    uint8_t wx_row;                       /* 1.6.0, TV: the list starts with the Local Weather row (JF_EXIT_WEATHER) */
+    uint8_t tv_resume;                    /* 1.6.0, TV: JF_TV_RESUME_*: coming back from that channel by Up or Down */
 } jf_config;
 
 typedef struct {char id[33];uint8_t kind,shape,used,ok;uint16_t off,len;uint32_t touched;} jf_art;
@@ -272,7 +367,7 @@ typedef struct {
     jf_track audio_tracks[JF_TRACKS],sub_tracks[JF_TRACKS];uint8_t audio_count,sub_count,audio_total,sub_total,tracks_ok;
     uint8_t note_warn,switching,menu_paused,menu_lang,menu_subs,subs_failed,stream_subs,chosen_lang,chosen_subs;
     uint32_t note_until,switch_pos,open_ms,open_shown,tracks_seq;
-    char message[56],detail_line[48],note[56];
+    char message[56],detail_line[64],note[56]; /* 1.6.4: detail_line 48 -> 64 for the next-step lines */
     /* One buffer: the reply of the outstanding request while browsing, the incoming JPEG
      * while playing (no artwork or library request runs during playback). */
     uint8_t buf[JF_BUF];size_t reply_size;
@@ -287,12 +382,58 @@ typedef struct {
     /* The focused card's name scrolls when it does not fit (jf_menu.h); draw_part says what
      * the last tick asked jf_app_draw to paint. */
     uint8_t draw_part;int16_t scroll_px;uint32_t scroll_at,scroll_key;
+    /* 1.6.0, TV and ChromaTube. source_id / live_id: what PlaybackInfo named for the title being opened (URL-encoded;
+     * empty: the item's own id, no live stream). playinfo_for_play: the PlaybackInfo that is out is still wanted.
+     * tv_opened: a stream of this title was asked for (its conversion is stopped on leaving). tv_close: JF_CLOSE_*,
+     * the server closes still owed; nothing is opened while any is. tv_state: JF_TV_*; tv_at: when the surf or the
+     * reopen wait ends, when "No signal" goes, when the exit began. tv_closed_*: the last two channels closed and
+     * when (JF_TV_REOPEN_MS). tv_exit: leaving once the closes are out (1 the start-up menu, 2 the Local Weather
+     * channel). tv_list_err: JF_TV_ERR_*, the list could not be read (the weather row and "Try again" stay).
+     * tv_stepped: this session's one step down was used. pi: the PlaybackInfo reply scanner (jf_pi_feed).
+     * thin_seen / frame_new: pictures delivered in this stream, and "this one was not yet counted" (jf_thin). */
+    char source_id[JF_SOURCE_ID],live_id[JF_LIVE_ID],tv_closed_id[2][33];
+    uint8_t tv_state,tv_close,tv_opened,tv_exit,tv_banner_armed,tv_closed_next,playinfo_for_play,tv_list_err,tv_stepped,tv_resume,frame_new,frame_check,thin_on,tv_starved,tv_step_tune;
+    char playinfo_id[33]; /* the title the PlaybackInfo that is out was asked for */
+    struct {uint8_t depth,in_str,esc,uni,after_str,expect,in_sources,elem,capture,dest,klen,kover,got_id,got_live,over;
+            uint16_t code,id_len,live_len;char key[16];} pi;
+    uint32_t tv_at,tv_closed_ms[2],tv_banner_until,tv_open_ms;
+    uint32_t thinned,thin_seen; /* pictures of a faster-than-asked stream left out on purpose (jf_thin), this play */
+    /* ADPCM bytes and blocks the sink took in this stream. A mono IMA block of n bytes is 2n-7 samples (a 4-byte
+     * header carrying one sample), so the samples fed are 2*bytes - 7*blocks; less audio_played: the sound queued. */
+    uint32_t audio_fed,audio_fed_blocks;
 } jf_app;
 
 /* ---------- small helpers ---------- */
 static inline void jf_copy(char *out,size_t cap,const char *in){if(!cap)return;size_t n=strlen(in);if(n>=cap)n=cap-1;memcpy(out,in,n);out[n]=0;}
 static inline int jf_hex_id(const char *s){size_t n=strlen(s);if(n!=32)return 0;for(size_t i=0;i<n;i++){char c=s[i];if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return 0;}return 1;}
-static inline void jf_fail(jf_app *a,const char *why){jf_copy(a->message,sizeof(a->message),why);a->detail_line[0]=0;a->err_kind=JF_ERR_OTHER;a->screen=JF_S_ERROR;a->redraw=1;}
+static inline void jf_tv_nosignal(jf_app *a,const char *why);
+static inline void jf_tv_tune(jf_app *a);
+static inline void jf_fail(jf_app *a,const char *why) {
+    /* 1.6.0, TV: whatever goes wrong with a channel is "No signal" and the list, never the error page */
+    if(a->cfg.mode==JF_MODE_TV&&a->screen==JF_S_PLAYER){if(a->tv_state!=JF_TV_NOSIGNAL)jf_tv_nosignal(a,"No signal");return;}
+    jf_copy(a->message,sizeof(a->message),why);a->detail_line[0]=0;a->err_kind=JF_ERR_OTHER;a->screen=JF_S_ERROR;a->redraw=1;
+}
+/* 1.6.4: a ChromaTube video that fails before its first picture: the owner's ChromaTube tool (which the server asks for
+ * the video) is the likely cause, so it is named with the next step; otherwise `why`, as before. */
+static inline void jf_fail_video(jf_app *a,const char *why,int before_picture) {
+    if(a->cfg.mode==JF_MODE_TUBE&&before_picture) {
+        jf_fail(a,JF_MSG_TUBE_DOWN);jf_copy(a->detail_line,sizeof(a->detail_line),JF_MSG_TUBE_DOWN_STEP);return;
+    }
+    jf_fail(a,why);
+}
+/* 1.6.0: an id from the server as it goes into a query (unreserved characters kept, the rest %XX). 0 when it does
+ * not fit: a cut id would name something else. */
+static inline int jf_urlenc(char *out,size_t cap,const char *in) {
+    size_t n=0;
+    for(;*in;in++) {
+        unsigned char c=(unsigned char)*in;
+        int plain=(c>='0'&&c<='9')||(c>='a'&&c<='z')||(c>='A'&&c<='Z')||c=='-'||c=='_'||c=='.'||c=='~';
+        if(n+(plain?1u:3u)>=cap){out[0]=0;return 0;}
+        if(plain)out[n++]=(char)c;
+        else{out[n++]='%';out[n++]="0123456789ABCDEF"[c>>4];out[n++]="0123456789ABCDEF"[c&15];}
+    }
+    out[n]=0;return 1;
+}
 /* One request at a time: a new one never starts while another is outstanding, so a reply
  * is never mixed into the next request's buffer. Work that must not be lost goes through jf_do. */
 static inline int jf_get(jf_app *a,uint8_t kind,const char *path) {
@@ -384,6 +525,34 @@ static inline int jf_parse_item(const pj_json *j,int obj,jf_item *out,uint8_t sh
     }
     return 1;
 }
+/* 1.6.0, TV and ChromaTube (channel and video names come from anywhere): a name as the console's ASCII font can
+ * show it. Latin-1 letters lose their accents, the usual typographic marks become plain ones, everything else
+ * outside ASCII (other scripts, emoji) is left out; doubled and leading spaces go. In place. */
+static inline void jf_ascii(char *s) {
+    static const char *const latin[64]={"A","A","A","A","A","A","AE","C","E","E","E","E","I","I","I","I","D","N","O","O","O","O","O","x",
+        "O","U","U","U","U","Y","Th","ss","a","a","a","a","a","a","ae","c","e","e","e","e","i","i","i","i","d","n","o","o","o","o","o","/",
+        "o","u","u","u","u","y","th","y"};
+    const unsigned char *in=(const unsigned char *)s;char *out=s;
+    while(*in) {
+        uint32_t c=*in++;unsigned more=0;const char *put=NULL;char one[2]={0,0};
+        if(c>=0xf0u){c&=7u;more=3;}else if(c>=0xe0u){c&=15u;more=2;}else if(c>=0xc0u){c&=31u;more=1;}else if(c>=0x80u)continue;
+        for(;more&&(*in&0xc0u)==0x80u;more--)c=(c<<6)|(*in++&0x3fu);
+        if(more)continue; /* a broken sequence */
+        if(c<0x80u){one[0]=(char)(c<32u||c==127u?' ':c);put=one;}
+        else if(c>=0xc0u&&c<=0xffu)put=latin[c-0xc0u];
+        else if(c==0xa0u)put=" ";
+        else if(c==0x2018u||c==0x2019u||c==0x2032u)put="'";
+        else if(c==0x201cu||c==0x201du||c==0x2033u||c==0xabu||c==0xbbu)put="\"";
+        else if(c==0x2010u||c==0x2011u||c==0x2012u||c==0x2013u||c==0x2014u||c==0x2212u)put="-";
+        else if(c==0x2026u)put="...";
+        else if(c==0x2022u||c==0xb7u)put="-";
+        else continue; /* nothing the font has */
+        /* never longer than the source: each replacement is at most as many bytes as the UTF-8 it stands for */
+        for(;*put;put++){if(*put==' '&&(out==s||out[-1]==' '))continue;*out++=*put;}
+    }
+    while(out>s&&out[-1]==' ')out--;
+    *out=0;
+}
 /* An items reply ({"Items":[...]} or a bare array) into `items`. Returns the count, -1 bad. */
 static inline int jf_parse_list(jf_app *a,jf_item *items,unsigned cap,uint8_t shape,uint32_t *total) {
     pj_json j;
@@ -397,19 +566,23 @@ static inline int jf_parse_list(jf_app *a,jf_item *items,unsigned cap,uint8_t sh
     unsigned count=0;
     for(unsigned i=(unsigned)list+1;i<j.tokens[list].next&&count<cap;i=j.tokens[i].next) {
         if(j.tokens[i].type!=PJ_JSON_OBJECT)continue;
-        if(jf_parse_item(&j,(int)i,&items[count],shape))count++;
+        if(jf_parse_item(&j,(int)i,&items[count],shape)) {
+            if(a->cfg.mode!=JF_MODE_JELLYFIN){jf_ascii(items[count].name);jf_ascii(items[count].sub);} /* 1.6.0: TV and ChromaTube names */
+            count++;
+        }
     }
     return (int)count;
 }
 
 /* ---------- requests ---------- */
-enum {JF_W_NONE,JF_W_HOME,JF_W_FOLDER,JF_W_DETAILS,JF_W_PLAY,JF_W_TRACKS};
+enum {JF_W_NONE,JF_W_HOME,JF_W_FOLDER,JF_W_DETAILS,JF_W_PLAY,JF_W_TRACKS,JF_W_CHANNELS};
 static inline void jf_play_start(jf_app *a);
 static inline void jf_switch_finish(jf_app *a);
 /* Starts the work now if the request slot is free, else when it frees (newest wins). */
 static inline void jf_do(jf_app *a,uint8_t want) {
     char path[300];
     a->busy=0; /* newer work replaces a pending offline retry */
+    if(want==JF_W_HOME&&a->cfg.mode==JF_MODE_TV){want=JF_W_CHANNELS;a->screen=JF_S_CHANNELS;a->redraw=1;} /* 1.6.0: TV's Home is the channel list */
     if(a->request!=JF_R_NONE){a->want=want;return;}
     a->want=JF_W_NONE;
     switch(want) {
@@ -426,7 +599,30 @@ static inline void jf_do(jf_app *a,uint8_t want) {
         snprintf(path,sizeof(path),"/Items?userId=%s&ids=%s&fields=Overview,Genres,ProductionYear&enableUserData=true"
                  "&enableImageTypes=Primary,Thumb,Backdrop&imageTypeLimit=1",a->cfg.user,a->detail.id);
         jf_get(a,JF_R_DETAILS,path);break;
+    case JF_W_CHANNELS: /* 1.6.0: one page of the channel list: no images, no user data, no programme (~0.5 KB a channel) */
+        snprintf(path,sizeof(path),"/LiveTv/Channels?userId=%s&startIndex=%u&limit=%u&enableImages=false&enableUserData=false"
+                 "&addCurrentProgram=false",a->cfg.user,(unsigned)a->folder_start,JF_TV_PAGE);
+        jf_get(a,JF_R_CHANNELS,path);break;
     case JF_W_PLAY:
+        if(a->cfg.mode!=JF_MODE_JELLYFIN) {
+            /* 1.6.0, TV and ChromaTube: PlaybackInfo first (it opens a live channel; it makes the server learn a remote
+             * video's size and sound), then the stream with the media source it names. Never while a close is owed. */
+            char body[440];
+            if(a->tv_close!=JF_CLOSE_NONE){a->want=want;break;} /* the tick asks again */
+            if(!a->bitrate||a->bitrate>JF_RATE_START_MODE(a))a->bitrate=JF_RATE_START_MODE(a); /* review B1 */
+            jf_copy(a->playinfo_id,sizeof(a->playinfo_id),a->detail.id);
+            snprintf(path,sizeof(path),"/Items/%s/PlaybackInfo?userId=%s",a->detail.id,a->cfg.user);
+            snprintf(body,sizeof(body),JF_PLAYINFO_BODY,a->cfg.user,(unsigned)a->bitrate,(unsigned)a->bitrate,
+                     a->cfg.audio?"adpcm_ima_wav":"mp3");
+            a->source_id[0]=0;a->live_id[0]=0;a->playinfo_for_play=1;
+            memset(&a->pi,0,sizeof(a->pi)); /* its reply is read as it arrives (jf_pi_feed), not kept */
+            if(jf_post(a,JF_R_PLAYINFO,path,body)!=0) {
+                a->playinfo_for_play=0;
+                if(a->cfg.mode==JF_MODE_TV)jf_tv_nosignal(a,"No signal");
+                else{a->screen=JF_S_DETAILS;jf_fail(a,"Could not start the video");}
+            }
+            break;
+        }
         /* English audio (and, when the owner turns them on, English subtitles) need the track list.
          * One lean request, only MediaStreams, so it fits the reply buffer; parsed in jf_pick_streams.
          * Only when it can matter: the FPGA can play sound, or subtitles are on (burned into the video). */
@@ -601,6 +797,7 @@ static inline uint32_t jf_position_s(const jf_app *a) {
     return a->start_s+(uint32_t)(us?frames*us/1000000u:0);
 }
 static inline void jf_report(jf_app *a,uint8_t kind) {
+    if(a->cfg.mode==JF_MODE_TV)return; /* 1.6.0: live channels are never reported (no watch history) */
     if(a->request!=JF_R_NONE)return; /* best effort; the next report carries the position */
     char body[256];
     uint64_t ticks=(uint64_t)jf_position_s(a)*10000000u;
@@ -755,6 +952,16 @@ static inline size_t jf_audio_sink(void *ctx,const uint8_t *data,size_t size,int
     if(first)a->audio_blocks++;
     size_t took=a->io.audio_write(a->io.ctx,data,size,first);
     if(took>size)took=size;
+    /* 1.6.0, TV and ChromaTube: the sink takes at most one message (256 bytes, 32 ms of sound) a call, and a short
+     * take ends the loop pass as "ring full"; with a picture decoded in most passes that feeds the sound more slowly
+     * than it plays. So the rest is offered again at once until the ring really has no room. Jellyfin mode: one
+     * call, as before. */
+    if(a->thin_on)while(took&&took<size) { /* only for a stream faster than asked (N1) */
+        size_t more=a->io.audio_write(a->io.ctx,data+took,size-took,0);
+        if(!more||more>size-took)break;
+        took+=more;
+    }
+    a->audio_fed+=(uint32_t)took;if(first&&took)a->audio_fed_blocks++;
     if(took<size){if(!a->audio_full_at)a->audio_full_at=a->now?a->now:1;}
     else a->audio_full_at=0;
     return took;
@@ -815,11 +1022,11 @@ static inline void jf_audio_ahead(jf_app *a) {
 }
 
 static inline int jf_stream_start(jf_app *a,uint32_t start_s) {
-    char path[460];
+    char path[640];
     if(a->stream_state)a->io.stream_close(a->io.ctx);
     jf_avi_init(&a->avi,a->buf,JF_BUF);jf_avi_audio(&a->avi,jf_audio_sink,a);a->chunk_size=a->chunk_used=0;a->frame_ready=0;a->ended=0;
     a->start_s=start_s;a->base_frame=a->at_frame=0;a->clock_ms=a->now;a->stall_ms=a->now;a->stream_state=1;
-    a->anchored=0;a->frame_waited=0;a->drops_in_row=0;a->measuring=0;
+    a->anchored=0;a->frame_waited=0;a->drops_in_row=0;a->measuring=0;a->thin_seen=0;a->frame_new=0;a->audio_fed=0;a->audio_fed_blocks=0;a->thin_on=0;
     /* A new segment: queued sound is dropped and the sound clock restarts at 0 with the pictures. A sink
      * declared dead (it refused bytes for a second: an outage, a stall) is revived: its stop was already
      * sent, so it starts again on the segment's first block like a fresh play. */
@@ -830,10 +1037,18 @@ static inline int jf_stream_start(jf_app *a,uint32_t start_s) {
     if(!a->audio_on)a->audio_tried=0; /* a sink that could not start (or was declared dead) gets fresh tries with the new segment */
     if(a->fps_cap<JF_FPS_MIN||a->fps_cap>JF_FPS_MAX)a->fps_cap=JF_FPS_START;
     jf_stream_session_id(a); /* fresh playSessionId: a reopen gets its own transcode, never a replay of the first segment */
+    /* 1.6.0: the same path as before for Jellyfin (source_id is only ever set by PlaybackInfo, which Jellyfin mode
+     * never asks). TV: PlaybackInfo's media source and live stream. ChromaTube: its media source. Neither ever
+     * carries startTimeTicks (the proven requests have none; a position is not proven for remote streams). */
     int n=snprintf(path,sizeof(path),"/Videos/%s/stream.avi?mediaSourceId=%s&playSessionId=%s&deviceId=%s"
-             "&videoCodec=mjpeg&%s&maxWidth=%d&maxHeight=%u&maxFramerate=%u&videoBitRate=%u&startTimeTicks=%llu",
-             a->detail.id,a->detail.id,a->stream_session,a->cfg.device,a->cfg.audio?JF_STREAM_AUDIO_IMA:JF_STREAM_AUDIO_MP3,
-             JF_W,JF_VIDEO_H,(unsigned)a->fps_cap,(unsigned)a->bitrate,(unsigned long long)start_s*10000000ull);
+             "&videoCodec=mjpeg&%s&maxWidth=%d&maxHeight=%u&maxFramerate=%u&videoBitRate=%u",
+             a->detail.id,a->source_id[0]?a->source_id:a->detail.id,a->stream_session,a->cfg.device,
+             a->cfg.audio?JF_STREAM_AUDIO_IMA:JF_STREAM_AUDIO_MP3,
+             JF_W,JF_VIDEO_H,(unsigned)a->fps_cap,(unsigned)a->bitrate);
+    if(n>0&&n<(int)sizeof(path)&&a->cfg.mode==JF_MODE_JELLYFIN)
+        n+=snprintf(path+n,sizeof(path)-(size_t)n,"&startTimeTicks=%llu",(unsigned long long)start_s*10000000ull);
+    if(n>0&&n<(int)sizeof(path)&&a->cfg.mode!=JF_MODE_JELLYFIN&&a->live_id[0])
+        n+=snprintf(path+n,sizeof(path)-(size_t)n,"&liveStreamId=%s",a->live_id);
     /* Chosen English audio track, and English subtitles burned in by the server (the console cannot
      * render subtitle files, so SubtitleMethod=Encode draws them into the MJPEG). -1: the server default. */
     if(n>0&&n<(int)sizeof(path)&&a->audio_index>=0)
@@ -843,6 +1058,7 @@ static inline int jf_stream_start(jf_app *a,uint32_t start_s) {
         snprintf(path+n,sizeof(path)-(size_t)n,"&subtitleStreamIndex=%d&subtitleMethod=Encode",(int)a->sub_index);
     a->open_ms=a->now;a->open_shown=a->shown;a->tracks_seq++; /* a new diagnostics line for this stream's choice */
     a->window_ms=a->now;a->window_shown=a->window_dropped=a->window_rebased=0;a->window_waits=0;
+    if(a->cfg.mode!=JF_MODE_JELLYFIN)a->tv_opened=1; /* 1.6.0: a conversion may exist on the server from here on */
     if(a->io.stream_open(a->io.ctx,path)!=0) {
         a->stream_state=0;
         if(a->stream_subs){a->subs_failed=1;a->sub_index=-1;jf_note(a,JF_MSG_SUBS_FAILED,1);return jf_stream_start(a,start_s);} /* once: without */
@@ -861,18 +1077,19 @@ static inline void jf_play(jf_app *a,uint32_t from_s) {
 static inline void jf_play_start(jf_app *a) {
     uint32_t from_s=a->play_from;
     jf_session_id(a);a->reconnects=0;a->reconnect_at=0;
-    if(!a->bitrate)a->bitrate=JF_RATE_START;
+    if(a->cfg.mode!=JF_MODE_JELLYFIN){if(!a->bitrate||a->bitrate>JF_RATE_START_MODE(a))a->bitrate=JF_RATE_START_MODE(a);} /* review B1: never more */
+    else if(!a->bitrate)a->bitrate=JF_RATE_START;
     else if(a->smooth_ms>=60000u&&a->bitrate<JF_RATE_MAX) {
         uint32_t next=a->bitrate*3/2>JF_RATE_MAX?JF_RATE_MAX:a->bitrate*3/2;
         if(!a->rate_cap||next<a->rate_cap)a->bitrate=next; /* never back to a rate the link could not carry */
     }
-    if(!a->fps_cap)a->fps_cap=JF_FPS_START;
+    if(!a->fps_cap||a->cfg.mode!=JF_MODE_JELLYFIN)a->fps_cap=JF_FPS_START; /* 1.6.0: TV and ChromaTube always ask for 15 */
     /* 20 s smooth with the cycle under 60% of the frame time: ask for a third more pictures next */
     else if(a->smooth_ms>=20000u&&a->cycle_ms&&a->play_frame_ms&&a->cycle_ms*10<a->play_frame_ms*6&&a->fps_cap<JF_FPS_MAX)
         a->fps_cap=a->fps_cap*4/3>JF_FPS_MAX?JF_FPS_MAX:a->fps_cap*4/3;
     a->smooth_ms=0;a->cycle_ms=0;a->adapt_at=a->now-JF_ADAPT_MS;
     if(a->cfg.fb)memset(a->cfg.fb,0,sizeof(uint16_t)*JF_W*JF_H);
-    a->playing=1;a->paused=0;a->shown=a->dropped=a->rebased=0;a->pictured=0;a->reconnect_mark=0;a->audio_catchup=0;
+    a->playing=1;a->paused=0;a->shown=a->dropped=a->rebased=0;a->pictured=0;a->reconnect_mark=0;a->audio_catchup=0;a->thinned=0;
     jf_audio_stop(a);a->audio_blocks=0;a->audio_fallbacks=0; /* sound starts with the stream's first block */
     a->screen=JF_S_PLAYER;a->redraw=1;a->osd=1;a->osd_until=a->now+3000;
     jf_copy(a->message,sizeof(a->message),"Loading");
@@ -885,7 +1102,13 @@ static inline void jf_play_start(jf_app *a) {
     jf_tracks_result(a,missing,0);
     jf_report(a,JF_R_PLAYING);
 }
+static inline void jf_server_close(jf_app *a,int encoding);
 static inline void jf_stop(jf_app *a,int report) {
+    /* 1.6.0, TV: the player's own stops (ended, lost, unreadable) are a lost channel; B goes through jf_tv_to_list */
+    if(a->cfg.mode==JF_MODE_TV){jf_tv_nosignal(a,"No signal");return;}
+    a->playinfo_for_play=0; /* 1.6.0: a PlaybackInfo still out is no longer wanted (its live stream, if any, is closed on reply) */
+    if(a->cfg.mode==JF_MODE_TUBE&&a->live_id[0]&&a->tv_close==JF_CLOSE_NONE)jf_server_close(a,0);
+    a->tv_opened=0;
     if(a->want==JF_W_PLAY||a->want==JF_W_TRACKS)a->want=JF_W_NONE; /* B while Loading: never starts */
     a->switching=0;a->menu_paused=0;a->note_until=0;
     if(a->stream_state){a->io.stream_close(a->io.ctx);a->stream_state=0;}
@@ -902,7 +1125,7 @@ static inline void jf_adapt(jf_app *a,const char *why) {
     uint32_t at=jf_position_s(a);
     a->adapt_at=a->now;a->smooth_ms=0;
     jf_copy(a->message,sizeof(a->message),why);a->redraw=1;
-    if(jf_stream_start(a,at)!=0){jf_stop(a,1);jf_fail(a,"Lost the connection to the server");}
+    if(jf_stream_start(a,at)!=0){{int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"Lost the connection to the server",unseen);};}
 }
 /* Paces pictures to the title's own cadence. With sound playing, the sound is the clock:
  * frame n is due when n frame-times of samples have played (both count from the stream
@@ -915,13 +1138,36 @@ static inline void jf_adapt(jf_app *a,const char *why) {
  * the clock and is shown. Playback therefore runs on at whatever rate the link and the
  * decoder allow instead of skipping everything once behind (the 1.2.0 failure: 35 shown,
  * 485 skipped, one picture per reopen). */
+/* 1.6.0, TV and ChromaTube: a stream that comes faster than the cap that was asked for (a live channel: 24 pictures
+ * a second measured although 15 were asked) cannot be slowed by asking again, and the console cannot decode it all:
+ * with sound, the sound reaches the ring only as fast as the pictures in front of it are dealt with, so it starves and
+ * everything plays slow with gaps (PC model: 19 of 24 pictures a second, 20% silence, at 54 ms a picture). So only
+ * one picture in `thin` is decoded: at least so many left out that what is shown is no more than the cap asked for,
+ * and so many that the measured cost of a picture fits in 80% of the time between two shown ones; at most one in 8
+ * (a 60-a-second channel: one in 5). Counted by pictures delivered in this stream (review M2), never by the
+ * container's frame number. 1: show them all (the stream keeps to the cap; always in Jellyfin mode). */
+static inline unsigned jf_thin(const jf_app *a,uint32_t frame_us) {
+    if(!frame_us||a->cfg.mode==JF_MODE_JELLYFIN||!a->fps_cap)return 1u;
+    /* the rate pictures really arrive at: a stream that leaves frame numbers empty delivers fewer than its header says */
+    if(a->thin_seen>=8u&&a->avi.frame_index>a->thin_seen)frame_us=(uint32_t)((uint64_t)frame_us*a->avi.frame_index/a->thin_seen);
+    uint32_t fps100=100000000u/frame_us;
+    if(fps100<=(a->fps_cap+2u)*100u)return 1u;
+    unsigned thin=(unsigned)((fps100+(a->fps_cap+1u)*100u-1u)/((a->fps_cap+1u)*100u));
+    if(a->cycle_ms) {
+        unsigned need=(unsigned)(((uint64_t)a->cycle_ms*10000u+(uint64_t)frame_us*8u-1u)/((uint64_t)frame_us*8u));
+        if(need>thin)thin=need;
+    }
+    return thin<1u?1u:thin>8u?8u:thin;
+}
 static inline void jf_player_tick(jf_app *a) {
     if(!a->playing||a->paused||a->switching){a->measuring=0;return;} /* switching: no stream until the track list is in */
+    if(a->cfg.mode==JF_MODE_TV&&a->link_down){jf_tv_nosignal(a,"Wi-Fi dropped");return;} /* 1.6.0: a live channel never reconnects */
+    if(a->cfg.mode==JF_MODE_TUBE&&a->link_down){jf_stop(a,1);jf_fail(a,"Wi-Fi dropped: the video stopped");return;} /* nor a remote video (review H3) */
     /* Subtitles asked for and no picture yet after JF_SUBS_WAIT_MS: the server cannot burn them in here. Never
      * break playback for them: reopen at the same place without, and say so in yellow (1.3.2). */
     if(a->stream_subs&&a->stream_state&&a->shown==a->open_shown&&!a->reconnect_at&&(uint32_t)(a->now-a->open_ms)>=JF_SUBS_WAIT_MS) {
         a->subs_failed=1;a->sub_index=-1;
-        if(jf_stream_start(a,a->start_s)!=0){jf_stop(a,1);jf_fail(a,"Lost the connection to the server");return;}
+        if(jf_stream_start(a,a->start_s)!=0){{int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"Lost the connection to the server",unseen);};return;}
         jf_note(a,JF_MSG_SUBS_FAILED,1);return;
     }
     jf_audio_poll(a);
@@ -953,7 +1199,7 @@ static inline void jf_player_tick(jf_app *a) {
         }
         if((int32_t)(a->now-a->reconnect_at)<0)return;
         a->reconnect_at=0;a->link_lost_ms=0;
-        if(jf_stream_start(a,a->reconnect_pos)!=0){jf_stop(a,1);jf_fail(a,"Lost the connection to the server");}
+        if(jf_stream_start(a,a->reconnect_pos)!=0){{int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"Lost the connection to the server",unseen);};}
         return;
     }
     for(int guard=0;guard<64;guard++) {
@@ -962,12 +1208,14 @@ static inline void jf_player_tick(jf_app *a) {
                 int n=a->io.stream_read(a->io.ctx,a->chunk,sizeof(a->chunk));
                 if(n<0&&a->stream_subs&&a->shown==a->open_shown) { /* ended or failed before any picture with subtitles: without them */
                     a->subs_failed=1;a->sub_index=-1;
-                    if(jf_stream_start(a,a->start_s)!=0){jf_stop(a,1);jf_fail(a,"Lost the connection to the server");return;}
+                    if(jf_stream_start(a,a->start_s)!=0){{int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"Lost the connection to the server",unseen);};return;}
                     jf_note(a,JF_MSG_SUBS_FAILED,1);return;
                 }
                 if(n==-1){a->ended=1;break;}
                 if(n<0) { /* lost: reopen where we are, with back-off, at most 5 times in a row */
-                    if(++a->reconnects>5){jf_stop(a,1);jf_fail(a,"Lost the connection to the server");return;}
+                    /* 1.6.0, TV: no reopen (the same channel is never opened twice within JF_TV_REOPEN_MS): No signal.
+                     * ChromaTube: no reopen at a position (review H3): the video stops and says so. */
+                    if(++a->reconnects>5||a->cfg.mode!=JF_MODE_JELLYFIN){{int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"Lost the connection to the server",unseen);};return;}
                     a->reconnect_pos=jf_position_s(a);a->io.stream_close(a->io.ctx);a->stream_state=0;
                     a->reconnect_at=a->now+(500u<<(a->reconnects-1));a->reconnect_mark=a->shown;
                     jf_copy(a->message,sizeof(a->message),a->link_down?JF_MSG_LINK_DOWN:JF_MSG_SERVER_LOST);a->redraw=1;return;
@@ -977,8 +1225,8 @@ static inline void jf_player_tick(jf_app *a) {
             }
             size_t used;int r=jf_avi_feed(&a->avi,a->chunk+a->chunk_used,a->chunk_size-a->chunk_used,&used);
             a->chunk_used+=used;
-            if(r<0){jf_stop(a,1);jf_fail(a,"The video stream could not be read");return;}
-            if(r==JF_AVI_FRAME){a->frame_ready=1;a->stall_ms=a->now;}
+            if(r<0){int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"The video stream could not be read",unseen);return;}
+            if(r==JF_AVI_FRAME){a->frame_ready=1;a->frame_new=1;a->stall_ms=a->now;}
             if(r==JF_AVI_AUDIO_FULL)break; /* the sound ring is full: the next picture waits behind this sound */
             continue;
         }
@@ -986,6 +1234,11 @@ static inline void jf_player_tick(jf_app *a) {
         uint32_t frame_us=jf_avi_frame_us(&a->avi);if(!frame_us)frame_us=41708;
         uint32_t frame_ms=frame_us/1000u;a->play_frame_ms=frame_ms;
         a->at_frame=a->avi.frame_index;
+        if(a->frame_new) { /* 1.6.0: each delivered picture is counted once, when it is first looked at */
+            unsigned thin=jf_thin(a,frame_us);
+            a->frame_new=0;a->frame_check=1;a->thin_on=(uint8_t)(thin>1u); /* the guards below: only for a stream faster than asked */
+            if(thin>1u&&(a->thin_seen++%thin)){a->thinned++;a->frame_ready=0;continue;}
+        }
         uint64_t due;uint32_t elapsed;
         if(a->audio_clock) { /* both count from the stream start */
             a->anchored=1;a->base_frame=0;a->clock_ms=a->now-jf_audio_ms(a);
@@ -997,6 +1250,20 @@ static inline void jf_player_tick(jf_app *a) {
             }
             due=(uint64_t)(a->avi.frame_index-(uint32_t)a->base_frame)*frame_us/1000u;
             elapsed=a->now-a->clock_ms;
+        }
+        /* 1.6.0, TV and ChromaTube, sound first. Decoding a picture keeps the loop away from the stream for a whole
+         * cycle, and the stream carries the sound in blocks of an eighth of a second between the pictures: the next
+         * block lies behind the pictures of the current one. So a picture is only kept when the sound already
+         * queued reaches a cycle (and 20 ms) past the picture's own time; otherwise it is left out at once, undecoded,
+         * and the stream read on to the next block; at most four in a row. Looked at once per picture. (PC model,
+         * 30 pictures a second at the console's figures: 0.6 sound gaps a second without this.) Never in Jellyfin mode. */
+        if(a->frame_check) {
+            a->frame_check=0;
+            if(a->thin_on&&a->audio_clock&&a->audio_rate&&a->cycle_ms&&a->drops_in_row<4u) {
+                uint32_t fed=a->audio_fed*2u-a->audio_fed_blocks*7u,queued=fed>a->audio_played?(uint32_t)((uint64_t)(fed-a->audio_played)*1000u/a->audio_rate):0;
+                uint32_t wait=due>elapsed?(uint32_t)(due-elapsed):0;
+                if(queued<wait+a->cycle_ms+20u){a->thinned++;a->drops_in_row++;a->frame_ready=0;continue;}
+            }
         }
         if(elapsed+1<due)break; /* not yet */
         if(elapsed>due+frame_ms*2) { /* late */
@@ -1042,7 +1309,24 @@ static inline void jf_player_tick(jf_app *a) {
          * as a slow decoder (the owner's "fps dropped to 6" with sound): catch-up skips are not counted in
          * window_dropped, and the cycle test is used only when the pictures run on their own clock. */
         int dec_slow=(total&&a->window_dropped*4>total)||(!a->audio_clock&&a->cycle_ms&&a->cycle_ms*10>a->play_frame_ms*9);
-        int may=(uint32_t)(a->now-a->adapt_at)>=JF_ADAPT_MS;
+        /* 1.6.0: only in Jellyfin mode. ChromaTube never reopens (review H3: a reopen needs a position, which is
+         * not proven for remote videos; at 500 kbit/s none is expected). TV, review B1: once in a session, when
+         * the link starves the sound or the pictures come late, the channel is closed and tuned again at
+         * JF_RATE_LOW_TV, under the reopen rule (about 10 s of "Adjusting quality..."); never again after that. */
+        int may=(uint32_t)(a->now-a->adapt_at)>=JF_ADAPT_MS&&a->cfg.mode==JF_MODE_JELLYFIN;
+        if(a->cfg.mode==JF_MODE_TV) {
+            /* N3: a starved window is one in which pictures still came (not a stream that ended or whose pictures
+             * stopped: that is "No signal") and either a quarter of them came late over the network or the sound
+             * lost JF_AUDIO_STARVE_PERMILLE with the network empty-handed. Two in a row, for this channel only. */
+            int coming=a->window_shown>0&&!a->ended&&(uint32_t)(a->now-a->stall_ms)<2500u;
+            int starving=coming&&((total&&a->window_rebased*4>total)||(deficit>=JF_AUDIO_STARVE_PERMILLE&&a->window_waits>=JF_AUDIO_STARVE_WAITS));
+            a->tv_starved=(uint8_t)(starving?a->tv_starved+1u:0u);
+            if(a->tv_starved>=2u&&!a->tv_stepped&&a->bitrate>JF_RATE_LOW_TV) {
+                a->tv_stepped=1;a->tv_starved=0;a->bitrate=JF_RATE_LOW_TV;a->softened++;
+                a->tv_step_tune=1;jf_tv_tune(a);a->tv_step_tune=0;
+                jf_copy(a->message,sizeof(a->message),"Adjusting quality...");return;
+            }
+        }
         if(may&&dec_slow&&a->fps_cap>JF_FPS_MIN) {
             uint32_t fit=a->cycle_ms?850u/a->cycle_ms:a->fps_cap*2/3; /* pictures the cycle can take, 15% spare */
             if(fit>=a->fps_cap)fit=a->fps_cap*2/3;
@@ -1085,8 +1369,248 @@ static inline void jf_switch_tracks(jf_app *a) {
 static inline void jf_switch_finish(jf_app *a) {
     int missing=jf_choose_tracks(a);a->chosen_lang=a->audio_lang;a->chosen_subs=a->subs;
     a->switching=0;
-    if(jf_stream_start(a,a->switch_pos)!=0){jf_stop(a,1);jf_fail(a,"Lost the connection to the server");return;}
+    if(jf_stream_start(a,a->switch_pos)!=0){{int unseen=!a->pictured;jf_stop(a,1);jf_fail_video(a,"Lost the connection to the server",unseen);};return;}
     jf_tracks_result(a,missing,1);
+}
+
+/* ---------- 1.6.0: PlaybackInfo, the server closes, the TV app ---------- */
+/* PlaybackInfo's reply, {"MediaSources":[{"Id":"..","LiveStreamId":"..",...}],...}, read as it arrives (review H2):
+ * a small JSON walker that keeps nothing but MediaSources[0].Id and MediaSources[0].LiveStreamId, so the reply may be
+ * of any size (a title with twenty tracks is 20 KB) and a reply that breaks off after the ids still names the live
+ * stream the server opened. The two values are collected raw in the app's buffer, which is free for this (nothing
+ * else is asked or played while a PlaybackInfo is out), at 0 and at JF_PI_ID_RAW. */
+static inline void jf_pi_char(jf_app *a,unsigned c) { /* one decoded character of the string being read */
+    if(a->pi.dest==1){if(a->pi.id_len+1u<JF_PI_ID_RAW)a->buf[a->pi.id_len++]=(uint8_t)c;else a->pi.over|=1u;}
+    else if(a->pi.dest==2){if(a->pi.live_len+1u<JF_PI_LIVE_RAW)a->buf[JF_PI_ID_RAW+a->pi.live_len++]=(uint8_t)c;else a->pi.over|=2u;}
+    else if(a->pi.klen+1u<sizeof(a->pi.key))a->pi.key[a->pi.klen++]=(char)c;
+    else a->pi.kover=1;
+}
+static inline void jf_pi_code(jf_app *a,unsigned c) { /* a \uXXXX code point as UTF-8 (surrogate halves are left out) */
+    if(c<0x80u)jf_pi_char(a,c);
+    else if(c<0x800u){jf_pi_char(a,0xc0u|(c>>6));jf_pi_char(a,0x80u|(c&63u));}
+    else if(c<0xd800u||c>0xdfffu){jf_pi_char(a,0xe0u|(c>>12));jf_pi_char(a,0x80u|((c>>6)&63u));jf_pi_char(a,0x80u|(c&63u));}
+}
+static inline void jf_pi_feed(jf_app *a,const uint8_t *data,size_t size) {
+    for(size_t i=0;i<size;i++) {
+        unsigned c=data[i];
+        if(a->pi.in_str) {
+            if(a->pi.uni) { /* the four hex digits of \uXXXX */
+                unsigned v=c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10u:c>='A'&&c<='F'?c-'A'+10u:0u;
+                a->pi.code=(uint16_t)((a->pi.code<<4)|v);
+                if(--a->pi.uni==0)jf_pi_code(a,a->pi.code);
+            } else if(a->pi.esc) {
+                a->pi.esc=0;
+                if(c=='u'){a->pi.uni=4;a->pi.code=0;}
+                else jf_pi_char(a,c=='n'||c=='r'||c=='t'||c=='b'||c=='f'?' ':c);
+            } else if(c=='\\')a->pi.esc=1;
+            else if(c=='"') {
+                a->pi.in_str=0;
+                if(a->pi.dest==1)a->pi.got_id=1;
+                else if(a->pi.dest==2)a->pi.got_live=1;
+                else a->pi.after_str=1; /* a key, if a colon follows */
+                a->pi.dest=0;
+            } else jf_pi_char(a,c);
+            continue;
+        }
+        if(c==' '||c=='\t'||c=='\r'||c=='\n')continue;
+        if(a->pi.after_str) {
+            a->pi.after_str=0;
+            if(c==':') {
+                a->pi.key[a->pi.klen]=0;
+                if(!a->pi.kover&&a->pi.depth==1&&!strcmp(a->pi.key,"MediaSources"))a->pi.expect=1;
+                else if(!a->pi.kover&&a->pi.depth==3&&a->pi.in_sources&&a->pi.elem==1) {
+                    if(!strcmp(a->pi.key,"Id")&&!a->pi.got_id)a->pi.capture=1;
+                    else if(!strcmp(a->pi.key,"LiveStreamId")&&!a->pi.got_live)a->pi.capture=2;
+                }
+                continue;
+            }
+        }
+        if(c=='"') {
+            a->pi.in_str=1;a->pi.esc=0;a->pi.uni=0;a->pi.klen=0;a->pi.kover=0;
+            a->pi.dest=a->pi.capture;a->pi.capture=0;
+            if(a->pi.dest==1)a->pi.id_len=0;else if(a->pi.dest==2)a->pi.live_len=0;
+            continue;
+        }
+        a->pi.capture=0; /* the value after the key was not a string (null, a number) */
+        if(c=='{'||c=='[') {
+            if(c=='['&&a->pi.expect&&a->pi.depth==1)a->pi.in_sources=1;
+            a->pi.expect=0;
+            if(a->pi.depth<255u)a->pi.depth++;
+            if(c=='{'&&a->pi.in_sources&&a->pi.depth==3&&a->pi.elem<255u)a->pi.elem++;
+        } else if(c=='}'||c==']') {
+            if(a->pi.depth)a->pi.depth--;
+            if(a->pi.in_sources&&a->pi.depth<=1)a->pi.in_sources=0;
+        } else a->pi.expect=0;
+    }
+}
+/* What jf_pi_feed found, into source_id and live_id (URL-encoded). Bit 0: a media source id; bit 1: a live stream
+ * id that fits (held in live_id: it must be closed); bit 2: a live stream id too long to play with: its close is
+ * sent from here at once (the request slot is free in the reply handler), or it is cut off, which only a server
+ * sending ids of several hundred characters could cause. */
+static inline int jf_pi_take(jf_app *a) {
+    int got=0;
+    a->source_id[0]=0;a->live_id[0]=0;
+    if(a->pi.got_id&&a->pi.id_len&&!(a->pi.over&1u)) {
+        a->buf[a->pi.id_len]=0;
+        if(jf_urlenc(a->source_id,sizeof(a->source_id),(const char *)a->buf))got|=1;
+    }
+    if(a->pi.got_live&&a->pi.live_len) {
+        a->buf[JF_PI_ID_RAW+a->pi.live_len]=0;
+        if(!(a->pi.over&2u)&&jf_urlenc(a->live_id,sizeof(a->live_id),(const char *)a->buf+JF_PI_ID_RAW))got|=2;
+        else {
+            char path[400];int n=snprintf(path,sizeof(path),"/LiveStreams/Close?liveStreamId=");
+            got|=4;
+            if(!(a->pi.over&2u)&&jf_urlenc(path+n,sizeof(path)-(size_t)n,(const char *)a->buf+JF_PI_ID_RAW)&&
+               a->request==JF_R_NONE&&jf_post(a,JF_R_LIVE_CLOSE,path,NULL)==0)a->tv_close=JF_CLOSE_LIVE_OUT;
+        }
+    }
+    memset(&a->pi,0,sizeof(a->pi));
+    return got;
+}
+/* The closes owed for the title in a->detail after its stream was closed here: DELETE /Videos/ActiveEncodings for the
+ * stream's playSessionId (`encoding`: TV, when a stream was asked for), then POST /LiveStreams/Close when PlaybackInfo
+ * opened a live stream. Sent one at a time by jf_close_pump; nothing is opened until both are answered. */
+static inline void jf_server_close(jf_app *a,int encoding) {
+    if(a->cfg.mode==JF_MODE_TV) {
+        unsigned k=a->tv_closed_next&1u;
+        jf_copy(a->tv_closed_id[k],33,a->detail.id);a->tv_closed_ms[k]=a->now;a->tv_closed_next=(uint8_t)(k^1u);
+    }
+    a->tv_close=(uint8_t)(encoding?JF_CLOSE_ENCODING:a->live_id[0]?JF_CLOSE_LIVE:JF_CLOSE_NONE);
+}
+static inline void jf_close_pump(jf_app *a) {
+    char path[JF_LIVE_ID+128];
+    if(a->request!=JF_R_NONE)return;
+    if(a->tv_close==JF_CLOSE_ENCODING) {
+        snprintf(path,sizeof(path),"/Videos/ActiveEncodings?deviceId=%s&playSessionId=%s",a->cfg.device,a->stream_session);
+        a->request=JF_R_ENCODING_STOP;a->reply_size=0;a->request_ms=a->now;
+        if(a->io.request(a->io.ctx,"DELETE",path,NULL)!=0){a->request=JF_R_NONE;return;} /* again next tick */
+        a->tv_close=JF_CLOSE_ENCODING_OUT;
+    } else if(a->tv_close==JF_CLOSE_LIVE) {
+        if(!a->live_id[0]){a->tv_close=JF_CLOSE_NONE;return;}
+        snprintf(path,sizeof(path),"/LiveStreams/Close?liveStreamId=%s",a->live_id);
+        if(jf_post(a,JF_R_LIVE_CLOSE,path,NULL)!=0)return;
+        a->tv_close=JF_CLOSE_LIVE_OUT;
+    }
+}
+/* The list: on its first page the built-in channel (when there is one) is the first row, the server's follow. */
+static inline unsigned jf_tv_extra(const jf_app *a){return a->cfg.wx_row&&a->folder_start==0?1u:0u;}
+/* With the list not readable (tv_list_err) the rows are the weather row and "Try again". */
+static inline unsigned jf_tv_rows(const jf_app *a){return jf_tv_extra(a)+(a->tv_list_err?1u:a->folder.count);}
+static inline int jf_tv_loading(const jf_app *a){return a->request==JF_R_CHANNELS||a->want==JF_W_CHANNELS||a->busy==JF_R_CHANNELS;}
+static inline void jf_load_channels(jf_app *a){a->folder.count=0;a->redraw=1;jf_do(a,JF_W_CHANNELS);}
+/* One page of GET /LiveTv/Channels into the folder page: id, name, and the channel number in `sub`. */
+static inline int jf_parse_channels(jf_app *a,uint32_t *total) {
+    pj_json j;
+    if(!a->tokens||!pj_json_parse(&j,a->buf,a->reply_size,a->tokens,a->token_cap)||j.tokens[0].type!=PJ_JSON_OBJECT)return -1;
+    int list=pj_json_find(&j,0,"Items");
+    uint64_t t;if(pj_json_u64(&j,pj_json_find(&j,0,"TotalRecordCount"),&t))*total=(uint32_t)t;
+    if(list<0||j.tokens[list].type!=PJ_JSON_ARRAY)return -1;
+    unsigned count=0;
+    for(unsigned i=(unsigned)list+1;i<j.tokens[list].next&&count<JF_TV_PAGE&&count<JF_PAGE_ITEMS;i=j.tokens[i].next) {
+        if(j.tokens[i].type!=PJ_JSON_OBJECT)continue;
+        jf_item *it=&a->folder.items[count];
+        if(!jf_parse_item(&j,(int)i,it,JF_SHAPE_THUMB))continue;
+        jf_ascii(it->name);
+        it->sub[0]=0;it->card_kind=it->hero_kind=JF_IMG_NONE;
+        if(!pj_json_text(&j,pj_json_find(&j,(int)i,"ChannelNumber"),it->sub,8))pj_json_text(&j,pj_json_find(&j,(int)i,"Number"),it->sub,8);
+        count++;
+    }
+    return (int)count;
+}
+/* The focused row one step on (dir 1) or back (-1), across pages, wrapping at both ends of the whole list. */
+static inline void jf_tv_move(jf_app *a,int dir) {
+    unsigned rows=jf_tv_rows(a);
+    if(jf_tv_loading(a)) { /* a page is on its way: only among the rows that are there (the weather row stays reachable) */
+        if(rows&&a->folder.focus>=rows)a->folder.focus=(uint8_t)(rows-1u);
+        else if(dir>0&&a->folder.focus+1u<rows)a->folder.focus++;
+        else if(dir<0&&a->folder.focus)a->folder.focus--;
+        a->redraw=1;return;
+    }
+    uint32_t last=a->folder_total?((a->folder_total-1u)/JF_TV_PAGE)*JF_TV_PAGE:0;
+    if(dir>0) {
+        if(a->folder.focus+1u<rows)a->folder.focus++;
+        else if(a->folder_start+a->folder.count<a->folder_total){a->folder_start+=JF_TV_PAGE;a->folder.focus=0;jf_load_channels(a);}
+        else if(a->folder_start){a->folder_start=0;a->folder.focus=0;jf_load_channels(a);}
+        else a->folder.focus=0;
+    } else {
+        if(a->folder.focus)a->folder.focus--;
+        else if(a->folder_start){a->folder_start=a->folder_start>JF_TV_PAGE?a->folder_start-JF_TV_PAGE:0;a->folder.focus=255;jf_load_channels(a);}
+        else if(last){a->folder_start=last;a->folder.focus=255;jf_load_channels(a);}
+        else a->folder.focus=(uint8_t)(rows?rows-1u:0u);
+    }
+    a->redraw=1;
+}
+/* Whatever is on goes off: the stream, the sound, and the server closes are queued. */
+static inline void jf_tv_leave(jf_app *a) {
+    a->playinfo_for_play=0;
+    if(a->want==JF_W_PLAY)a->want=JF_W_NONE;
+    if(a->stream_state){a->io.stream_close(a->io.ctx);a->stream_state=0;}
+    jf_audio_stop(a); /* the channel's sound, or the Local Weather channel's */
+    a->playing=0;a->paused=0;a->switching=0;a->reconnect_at=0;a->note_until=0;a->tv_banner_until=0;a->tv_banner_armed=0;
+    if(a->tv_close==JF_CLOSE_NONE&&(a->tv_opened||a->live_id[0]))jf_server_close(a,a->tv_opened);
+    a->tv_opened=0;
+}
+static inline void jf_tv_black(jf_app *a){if(a->cfg.fb)memset(a->cfg.fb,0,sizeof(uint16_t)*JF_W*JF_H);}
+static inline void jf_tv_nosignal(jf_app *a,const char *why) {
+    jf_tv_leave(a);
+    a->tv_state=JF_TV_NOSIGNAL;a->tv_at=a->now+JF_TV_NOSIGNAL_MS;a->screen=JF_S_PLAYER;
+    jf_tv_black(a);jf_copy(a->message,sizeof(a->message),why);a->pictured=0;a->redraw=1;
+}
+static inline void jf_tv_to_list(jf_app *a){jf_tv_leave(a);a->tv_state=JF_TV_IDLE;a->screen=JF_S_CHANNELS;a->redraw=1;}
+/* Tunes the focused row: the built-in channel at once; a server channel once the closes owed are out and, for a
+ * channel closed less than JF_TV_REOPEN_MS ago, once that time is over (jf_tv_tick). */
+static inline void jf_tv_tune(jf_app *a) {
+    unsigned extra=jf_tv_extra(a);
+    jf_tv_leave(a);
+    if(a->folder.focus<extra) { /* the built-in channel: the launcher shows it once this app has let go (JF_EXIT_WEATHER) */
+        a->tv_state=JF_TV_IDLE;a->screen=JF_S_CHANNELS;a->tv_exit=2;a->tv_at=a->now;a->redraw=1;return;
+    }
+    if(a->folder.focus-extra>=a->folder.count){a->tv_state=JF_TV_IDLE;a->screen=JF_S_CHANNELS;a->redraw=1;return;}
+    a->detail=a->folder.items[a->folder.focus-extra];
+    a->tv_starved=0;
+    if(!a->tv_step_tune){a->tv_stepped=0;a->bitrate=JF_RATE_START_TV;} /* N3: the step down was the last channel's */
+    a->screen=JF_S_PLAYER;jf_tv_black(a);a->pictured=0;a->osd=0;a->redraw=1;a->tv_banner_armed=1;
+    jf_copy(a->message,sizeof(a->message),"Tuning...");
+    a->tv_state=JF_TV_WAIT;a->tv_at=a->now;
+    for(unsigned k=0;k<2;k++)
+        if(a->tv_closed_id[k][0]&&!strcmp(a->tv_closed_id[k],a->detail.id)&&(uint32_t)(a->now-a->tv_closed_ms[k])<JF_TV_REOPEN_MS)
+            a->tv_at=a->tv_closed_ms[k]+JF_TV_REOPEN_MS;
+}
+/* Up/Down while watching (a channel, the Local Weather channel, No signal): what is on goes off at once, the target
+ * steps, and it is tuned JF_TV_SURF_MS after the last press. Up is the next channel, Down the one before. */
+static inline void jf_tv_surf(jf_app *a,int dir) {
+    if(jf_tv_loading(a))return;
+    jf_tv_leave(a);
+    a->screen=JF_S_PLAYER;jf_tv_black(a);a->pictured=0;a->message[0]=0;
+    jf_tv_move(a,dir);
+    a->tv_state=JF_TV_SURF;a->tv_at=a->now+JF_TV_SURF_MS;a->redraw=1;
+}
+static inline void jf_tv_tick(jf_app *a) {
+    jf_close_pump(a);
+    if(a->tv_exit) { /* B on the list: out once the closes are answered, or after JF_TV_EXIT_MS */
+        if((a->tv_close==JF_CLOSE_NONE&&a->request==JF_R_NONE)||(uint32_t)(a->now-a->tv_at)>=JF_TV_EXIT_MS)
+            {a->exit_to=(uint8_t)(a->tv_exit==2?JF_EXIT_WEATHER:JF_EXIT_MENU);a->screen=JF_S_EXIT;}
+        return;
+    }
+    switch(a->tv_state) {
+    case JF_TV_SURF:
+        if((int32_t)(a->now-a->tv_at)>=0&&!jf_tv_loading(a))jf_tv_tune(a);
+        break;
+    case JF_TV_WAIT:
+        if((int32_t)(a->now-a->tv_at)>=0&&a->tv_close==JF_CLOSE_NONE&&a->request==JF_R_NONE&&!a->want)
+            {a->tv_state=JF_TV_OPENING;a->tv_open_ms=a->now;jf_do(a,JF_W_PLAY);}
+        break;
+    case JF_TV_PLAYING:
+        if(a->playing&&a->pictured&&a->tv_banner_armed){a->tv_banner_armed=0;a->tv_banner_until=a->now+JF_TV_BANNER_MS;if(!a->tv_banner_until)a->tv_banner_until=1;}
+        if(a->playing&&!a->pictured&&(uint32_t)(a->now-a->tv_open_ms)>=JF_TV_FIRST_MS)jf_tv_nosignal(a,"No signal");
+        else if(a->playing&&a->pictured&&(uint32_t)(a->now-a->stall_ms)>=JF_TV_STALL_MS)jf_tv_nosignal(a,"No signal");
+        break;
+    case JF_TV_NOSIGNAL:
+        if((int32_t)(a->now-a->tv_at)>=0)jf_tv_to_list(a);
+        break;
+    default:break; /* idle; opening (the PlaybackInfo reply moves on, the platform bounds the wait) */
+    }
+    if(a->tv_banner_until&&(int32_t)(a->now-a->tv_banner_until)>=0){a->tv_banner_until=0;a->redraw=1;}
 }
 
 /* ---------- replies ---------- */
@@ -1100,6 +1624,55 @@ static inline void jf_add_row(jf_app *a,const char *title,uint8_t shape) {
 static inline void jf_app_reply(jf_app *a,int status) {
     uint8_t kind=a->request;a->request=JF_R_NONE;
     if(kind==JF_R_PLAYING||kind==JF_R_PROGRESS||kind==JF_R_STOPPED)return; /* best effort */
+    /* 1.6.0: the closes of a channel, in order, whatever the server answered (it also cleans up by itself) */
+    if(kind==JF_R_ENCODING_STOP){a->tv_close=(uint8_t)(a->live_id[0]?JF_CLOSE_LIVE:JF_CLOSE_NONE);return;}
+    if(kind==JF_R_LIVE_CLOSE){a->tv_close=JF_CLOSE_NONE;a->live_id[0]=0;return;}
+    if(kind==JF_R_PLAYINFO) {
+        int go=a->playinfo_for_play&&a->screen==JF_S_PLAYER&&!a->playing; /* not if B (or another channel) came meanwhile */
+        /* What the reply named, read as it arrived (also from a reply that broke off after the ids, or that nobody
+         * waits for any more): bit 0 a media source, bit 1 a live stream now held in live_id, bit 2 a live stream
+         * whose id is too long to play with (its close is already out). */
+        int got=jf_pi_take(a);
+        int ok=status==200&&(got&1)&&!(got&4)&&(a->cfg.mode!=JF_MODE_TV||(got&2));
+        a->playinfo_for_play=0;a->redraw=1;
+        if(!ok)a->source_id[0]=0;
+        if(!(go&&ok)&&(got&2)&&a->tv_close==JF_CLOSE_NONE)jf_server_close(a,0); /* opened for nobody: closed again */
+        /* No answer (in time, or given up because nobody waited: N4): the server may have opened the channel all the
+         * same and its id is unknown, so that channel is not asked again within the reopen time (review H2). */
+        if(a->cfg.mode==JF_MODE_TV&&status<0&&!(got&6)) {
+            unsigned k=a->tv_closed_next&1u;
+            jf_copy(a->tv_closed_id[k],33,a->playinfo_id);a->tv_closed_ms[k]=a->now;a->tv_closed_next=(uint8_t)(k^1u);
+        }
+        if(!go)return;
+        if(ok) {
+            if(a->want==JF_W_PLAY)a->want=JF_W_NONE;
+            if(a->cfg.mode==JF_MODE_TV){a->tv_state=JF_TV_PLAYING;a->tv_open_ms=a->now;}
+            jf_play_start(a);
+            if(a->cfg.mode==JF_MODE_TV&&a->playing){jf_copy(a->message,sizeof(a->message),"Tuning...");a->osd=0;}
+            return;
+        }
+        if(a->cfg.mode==JF_MODE_TV&&status!=401) {
+            /* No answer in time: the server may have opened the channel all the same, and its id is unknown, so the
+             * same channel is not asked again within the reopen time (review H2). */
+            jf_tv_nosignal(a,status<0?"The server did not answer":"No signal");return;
+        }
+        if(a->cfg.mode==JF_MODE_TV){a->tv_state=JF_TV_IDLE;a->screen=JF_S_CHANNELS;} /* 401: the sign-in page below */
+        else {
+            a->screen=JF_S_DETAILS;
+            if(status!=401){if(status<0)jf_fail(a,"The server did not answer");else jf_fail_video(a,"Could not start the video",1);return;}
+        }
+    }
+    if(kind==JF_R_CHANNELS&&status!=200) {
+        if(a->screen==JF_S_PLAYER){a->tv_state=JF_TV_IDLE;a->screen=JF_S_CHANNELS;} /* a page asked for while stepping channels failed */
+        a->tv_resume=JF_TV_RESUME_NONE;
+        /* Review M4: the list never ends on the error page, where the Local Weather row could not be reached. After
+         * the usual five tries (or at once for a refusal) the list shows that row, "Try again", and why. */
+        if(!(status<0&&status!=-3&&(a->retries<5||a->link_down))) { /* -3: a page that does not fit will not fit next time either */
+            a->tv_list_err=(uint8_t)(status==401?JF_TV_ERR_SIGNIN:status<0?JF_TV_ERR_UNREACHABLE:JF_TV_ERR_OTHER);
+            a->folder.count=0;a->folder_total=0;a->folder_start=0;a->folder.focus=0;a->retries=0;a->offline=0;a->redraw=1;
+            return;
+        }
+    }
     if(kind==JF_R_IMAGE){jf_art_store(a,status==200);a->redraw=1;return;}
     if(kind==JF_R_STREAMS&&a->switching) { /* 1.3.2: the list for a mid-play switch: reopen with the choice */
         if(status==200)jf_pick_streams(a);else a->streams_done=1;
@@ -1131,6 +1704,43 @@ static inline void jf_app_reply(jf_app *a,int status) {
     }
     a->retries=0;a->offline=0;a->redraw=1; /* the parse below used the screen as scratch */
     char path[200];
+    if(kind==JF_R_CHANNELS) { /* 1.6.0: one page of the TV channel list */
+        uint32_t total=0;int n=jf_parse_channels(a,&total);
+        if(n<0) {
+            a->screen=JF_S_CHANNELS;a->tv_state=JF_TV_IDLE;a->tv_resume=JF_TV_RESUME_NONE;a->tv_list_err=JF_TV_ERR_OTHER;
+            a->folder.count=0;a->folder_total=0;a->folder_start=0;a->folder.focus=0;a->redraw=1;return;
+        }
+        a->tv_list_err=JF_TV_ERR_NONE;
+        if(!n&&a->folder_start){a->folder_start=0;a->folder.focus=0;jf_load_channels(a);return;} /* the list got shorter */
+        a->folder.count=(uint8_t)n;a->folder.shape=JF_SHAPE_THUMB;a->folder_total=total;
+        unsigned rows=jf_tv_rows(a);
+        if(a->folder.focus>=rows)a->folder.focus=(uint8_t)(rows?rows-1:0); /* also "the last row" asked for when paging up */
+        a->redraw=1;
+        if(a->tv_resume!=JF_TV_RESUME_NONE&&a->screen==JF_S_CHANNELS&&a->tv_state==JF_TV_IDLE) {
+            /* back from the Local Weather channel by Up or Down: the step is taken from its row, as if it were on */
+            int dir=a->tv_resume==JF_TV_RESUME_NEXT?1:-1;
+            a->tv_resume=JF_TV_RESUME_NONE;
+            if(a->folder_start==0&&jf_tv_extra(a)&&a->folder_total){a->folder.focus=0;jf_tv_surf(a,dir);}
+        }
+        return;
+    }
+    if(kind==JF_R_VIEWS&&a->cfg.mode==JF_MODE_TUBE) { /* 1.6.0: ChromaTube's root is the library of that name */
+        jf_item root;memset(&root,0,sizeof(root));
+        pj_json j;
+        if(!a->tokens||!pj_json_parse(&j,a->buf,a->reply_size,a->tokens,a->token_cap)){jf_fail(a,"Unexpected reply from the server");return;}
+        int list=j.tokens[0].type==PJ_JSON_OBJECT?pj_json_find(&j,0,"Items"):0;
+        if(list<0||j.tokens[list].type!=PJ_JSON_ARRAY){jf_fail(a,"Unexpected reply from the server");return;}
+        for(unsigned i=(unsigned)list+1;i<j.tokens[list].next&&!root.id[0];i=j.tokens[i].next) {
+            char name[32]="",id[40]="";
+            if(j.tokens[i].type!=PJ_JSON_OBJECT)continue;
+            pj_json_text(&j,pj_json_find(&j,(int)i,"Name"),name,sizeof(name));
+            pj_json_text(&j,pj_json_find(&j,(int)i,"Id"),id,sizeof(id));
+            if(!strcmp(name,JF_TUBE_LIBRARY)&&jf_hex_id(id))jf_copy(root.id,sizeof(root.id),id);
+        }
+        if(!root.id[0]){jf_fail(a,JF_MSG_TUBE_MISSING);jf_copy(a->detail_line,sizeof(a->detail_line),JF_MSG_TUBE_MISSING_STEP);return;}
+        jf_copy(root.name,sizeof(root.name),JF_TUBE_LIBRARY);root.type=JF_T_FOLDER;
+        a->screen=JF_S_CONNECT;jf_open_folder(a,&root);return; /* from Connect: depth 0, so B there leaves the app */
+    }
     if(kind==JF_R_VIEWS) {
         memset(&a->views,0,sizeof(a->views));
         int n=jf_parse_list(a,a->views.items,JF_ROW_ITEMS,JF_SHAPE_THUMB,NULL);
@@ -1206,6 +1816,8 @@ static inline void jf_after_home_step(jf_app *a) {
  * failure status). Replies to playback reports are not kept: the buffer holds the video. */
 static inline int jf_app_reply_data(jf_app *a,const uint8_t *data,size_t size) {
     if(a->request==JF_R_PLAYING||a->request==JF_R_PROGRESS||a->request==JF_R_STOPPED)return 1;
+    if(a->request==JF_R_ENCODING_STOP||a->request==JF_R_LIVE_CLOSE)return 1; /* 1.6.0: nothing of these is kept either */
+    if(a->request==JF_R_PLAYINFO){jf_pi_feed(a,data,size);return 1;} /* read as it arrives, whatever its size (review H2) */
     if(size>JF_BUF-a->reply_size)return 0;
     memcpy(a->buf+a->reply_size,data,size);a->reply_size+=size;return 1;
 }
@@ -1216,7 +1828,8 @@ static inline void jf_back_from_folder(jf_app *a) {
     if(a->depth) {
         a->depth--;jf_copy(a->folder_id,33,a->parents[a->depth]);jf_copy(a->folder_title,32,a->parent_titles[a->depth]);
         a->folder_start=a->parent_start[a->depth];a->folder.count=0;a->folder.focus=0;a->redraw=1;jf_load_folder(a);
-    } else {a->screen=JF_S_HOME;a->redraw=1;}
+    } else if(a->cfg.mode==JF_MODE_TUBE){a->exit_to=JF_EXIT_MENU;a->screen=JF_S_EXIT;} /* 1.6.0: ChromaTube's root: back to the start-up menu */
+    else {a->screen=JF_S_HOME;a->redraw=1;}
 }
 static inline void jf_activate(jf_app *a,const jf_item *it) {
     if(it->type==JF_T_SERIES||it->type==JF_T_SEASON||it->type==JF_T_FOLDER)jf_open_folder(a,it);
@@ -1227,8 +1840,35 @@ static inline void jf_folder_page(jf_app *a,int forward) {
     else if(!forward&&a->folder_start){a->folder_start=a->folder_start>JF_PAGE_ITEMS?a->folder_start-JF_PAGE_ITEMS:0;
         a->folder.focus=JF_PAGE_ITEMS-1;jf_load_folder(a);}
 }
+/* Details offers Resume next to "From start" for a title left part-way; ChromaTube (remote streams) always starts
+ * at the beginning in 1.6.0. */
+static inline unsigned jf_detail_actions(const jf_app *a) {
+    return a->cfg.mode!=JF_MODE_TUBE&&a->detail.resume_s>30&&!a->detail.played?2u:1u;
+}
 static inline void jf_app_press(jf_app *a,uint16_t pressed) {
     if(!pressed)return;
+    if(a->cfg.mode==JF_MODE_TV&&(a->screen==JF_S_PLAYER||a->screen==JF_S_CHANNELS)) { /* 1.6.0 */
+        if(a->tv_exit)return; /* leaving: the closes are going out */
+        if(a->screen==JF_S_CHANNELS) {
+            unsigned extra=jf_tv_extra(a);
+            if(pressed&JF_BTN_B){a->tv_exit=1;a->tv_at=a->now;a->redraw=1;} /* back to the start-up menu */
+            else if(pressed&(JF_BTN_A|JF_BTN_START)) {
+                if(a->tv_list_err&&a->folder.focus>=extra){a->tv_list_err=JF_TV_ERR_NONE;a->retries=0;a->folder_start=0;jf_load_channels(a);} /* Try again */
+                else if(a->folder.focus<extra||(!jf_tv_loading(a)&&a->folder.focus<jf_tv_rows(a)))jf_tv_tune(a); /* the weather row at any time */
+            }
+            else if((pressed&JF_BTN_SELECT)&&a->tv_list_err==JF_TV_ERR_SIGNIN){a->exit_to=JF_EXIT_SETUP;a->screen=JF_S_EXIT;}     /* sign in again */
+            else if((pressed&JF_BTN_SELECT)&&a->tv_list_err==JF_TV_ERR_UNREACHABLE){a->exit_to=JF_EXIT_FIND;a->screen=JF_S_EXIT;} /* find my server again */
+            else if(pressed&JF_BTN_UP)jf_tv_move(a,-1);
+            else if(pressed&JF_BTN_DOWN)jf_tv_move(a,1);
+            return;
+        }
+        if(pressed&JF_BTN_B)jf_tv_to_list(a);                           /* B: the list, whatever is on */
+        else if(pressed&(JF_BTN_UP|JF_BTN_DOWN))jf_tv_surf(a,pressed&JF_BTN_UP?1:-1);
+        else if(pressed&(JF_BTN_A|JF_BTN_START|JF_BTN_SELECT)) {         /* which channel is this: the banner again */
+            a->tv_banner_until=a->now+JF_TV_BANNER_MS;if(!a->tv_banner_until)a->tv_banner_until=1;a->redraw=1;
+        }
+        return;
+    }
     /* Select, or the Menu button when the media FPGA forwards it: the Jellyfin menu (jf_menu.h). */
     if((pressed&(JF_BTN_SELECT|JF_BTN_MENU))&&(a->screen==JF_S_HOME||a->screen==JF_S_FOLDER||a->screen==JF_S_DETAILS)) {
         jf_menu_open(a);jf_next_image(a);return;
@@ -1261,7 +1901,7 @@ static inline void jf_app_press(jf_app *a,uint16_t pressed) {
         a->redraw=1;break;
     }
     case JF_S_DETAILS: {
-        unsigned actions=a->detail.resume_s>30&&!a->detail.played?2u:1u;
+        unsigned actions=jf_detail_actions(a);
         if(pressed&JF_BTN_LEFT){if(a->detail_action)a->detail_action--;a->redraw=1;}
         else if(pressed&JF_BTN_RIGHT){if(a->detail_action+1u<actions)a->detail_action++;a->redraw=1;}
         else if(pressed&(JF_BTN_A|JF_BTN_START)){if(jf_playable(&a->detail))jf_play(a,actions==2&&a->detail_action==0?a->detail.resume_s:0);}
@@ -1271,6 +1911,7 @@ static inline void jf_app_press(jf_app *a,uint16_t pressed) {
     case JF_S_PLAYER:
         if(pressed&JF_BTN_B)jf_stop(a,1);
         else if(!a->playing||a->reconnect_at||a->switching)break; /* still loading: only B counts */
+        else if((pressed&JF_BTN_MENU)&&a->cfg.mode==JF_MODE_TUBE){} /* 1.6.0: no menu over a ChromaTube video (its Audio row reopens at a position) */
         else if(pressed&JF_BTN_MENU)jf_menu_open(a); /* 1.3.2: the menu over the video (Audio row focused), media FPGA */
         else if(pressed&(JF_BTN_A|JF_BTN_START)) {
             a->paused=!a->paused;a->osd=1;a->osd_until=a->now+3000;a->redraw=1;
@@ -1279,6 +1920,7 @@ static inline void jf_app_press(jf_app *a,uint16_t pressed) {
                 a->starve_mark=a->audio_played;a->starve_ms=a->now;a->window_ms=a->now;} /* the pause is nobody's deficit */
             jf_report(a,JF_R_PROGRESS);
         }
+        else if((pressed&(JF_BTN_LEFT|JF_BTN_RIGHT))&&a->cfg.mode==JF_MODE_TUBE){a->osd=1;a->osd_until=a->now+3000;a->redraw=1;} /* 1.6.0, review H3: no seek on ChromaTube */
         else if(pressed&JF_BTN_LEFT)jf_seek(a,-(int)JF_SEEK_S);
         else if(pressed&JF_BTN_RIGHT)jf_seek(a,(int)JF_SEEK_S);
         else if(pressed&(JF_BTN_SELECT|JF_BTN_UP|JF_BTN_DOWN)){a->osd=!a->osd;a->osd_until=a->now+4000;a->redraw=1;}
@@ -1303,7 +1945,26 @@ static inline void jf_app_start(jf_app *a,const jf_platform *io,const jf_config 
     a->art_bytes=cfg->art;a->art_cap=cfg->art&&cfg->art_cap<=JF_ART_MAX?cfg->art_cap:0;
     a->tokens=cfg->scratch;a->token_cap=cfg->scratch?(unsigned)(cfg->scratch_bytes/sizeof(pj_json_token)):0;
     if(a->token_cap>65534u)a->token_cap=65534u;
-    jf_load_home(a);
+    if(a->cfg.mode>JF_MODE_TUBE)a->cfg.mode=JF_MODE_JELLYFIN;
+    if(a->cfg.mode!=JF_MODE_TV){a->cfg.wx_row=0;a->cfg.tv_resume=JF_TV_RESUME_NONE;}
+    a->tv_resume=a->cfg.tv_resume;
+    jf_load_home(a); /* TV: the channel list; ChromaTube: the views, then its library; Jellyfin: Home */
+}
+/* 1.6.0 (review H2): the console is about to leave for Games with this app open. TV and ChromaTube: what plays is
+ * stopped and the server closes are queued; the platform then ticks the app for a short bounded time while
+ * jf_app_owes says something is still owed (a close, or a PlaybackInfo whose live stream must be closed when its
+ * reply comes). Jellyfin mode: nothing, as before. */
+static inline void jf_app_quiesce(jf_app *a) {
+    if(a->cfg.mode==JF_MODE_TV)jf_tv_leave(a);
+    else if(a->cfg.mode==JF_MODE_TUBE&&(a->playing||a->screen==JF_S_PLAYER))jf_stop(a,1);
+}
+/* N4: the request that is out is a PlaybackInfo nobody waits for any more (B, another channel, the weather row).
+ * The platform gives such a request a few seconds more (its ids, if they come, close the live stream) and then
+ * drops it, so the app's one request slot is not held for up to 30 s. */
+static inline int jf_app_request_unwanted(const jf_app *a){return a->request==JF_R_PLAYINFO&&!a->playinfo_for_play;}
+static inline int jf_app_owes(const jf_app *a) {
+    if(a->cfg.mode==JF_MODE_JELLYFIN)return 0;
+    return a->tv_close!=JF_CLOSE_NONE||a->request==JF_R_PLAYINFO||a->request==JF_R_ENCODING_STOP||a->request==JF_R_LIVE_CLOSE;
 }
 /* The platform's Wi-Fi link: down while the shell rejoins (a lost stream then waits for it), up again. */
 static inline void jf_app_set_link(jf_app *a,int up) {
@@ -1313,7 +1974,10 @@ static inline void jf_app_set_link(jf_app *a,int up) {
     if(up&&a->busy)a->retry_at=a->now;
 }
 /* Before leaving the app (B on Home, or the overlay closing): stop and report. */
-static inline void jf_app_close(jf_app *a){if(a->playing)jf_stop(a,1);}
+static inline void jf_app_close(jf_app *a) {
+    if(a->cfg.mode==JF_MODE_TV){jf_tv_leave(a);return;} /* 1.6.0: the stream closes; closes still owed are the server's to clean up */
+    if(a->playing)jf_stop(a,1);
+}
 /* Call often (every loop). Returns 1 when the screen should be redrawn. */
 static inline int jf_app_tick(jf_app *a,uint32_t now) {
     a->now=now;
@@ -1322,8 +1986,11 @@ static inline int jf_app_tick(jf_app *a,uint32_t now) {
         uint8_t step=a->busy;a->busy=0; /* only if that screen is still up: never pull the user back */
         if(step==JF_R_FOLDER){if(a->screen==JF_S_FOLDER)jf_load_folder(a);}
         else if(step==JF_R_DETAILS){if(a->screen==JF_S_DETAILS)jf_open_details(a,&a->detail);}
+        else if(step==JF_R_CHANNELS){if(a->screen==JF_S_CHANNELS)jf_load_channels(a);} /* 1.6.0 */
         else if(a->screen==JF_S_HOME||a->screen==JF_S_CONNECT)jf_load_home(a);
     }
+    if(a->cfg.mode==JF_MODE_TV)jf_tv_tick(a);            /* 1.6.0: the closes, the surf and reopen waits, No signal, the weather channel */
+    else if(a->cfg.mode==JF_MODE_TUBE)jf_close_pump(a);  /* a live stream PlaybackInfo opened for a video, if ever */
     if(a->want&&a->request==JF_R_NONE)jf_do(a,a->want);
     if(a->playing)jf_player_tick(a);
     else jf_next_image(a);

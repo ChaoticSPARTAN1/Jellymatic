@@ -55,3 +55,28 @@ CONFIG_ESP_WIFI_RX_BA_WIN=6
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
 CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
 CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=16
+
+# Launcher 1.6.0, the Local Weather channel (main/weather_esp32.c): the first HTTPS client here
+# (api.weather.gov). The server's chain is checked against the ESP-IDF root certificate bundle;
+# the full bundle (148 roots, 67,806 bytes of flash; the IDF default) is named so a change of default cannot
+# drop it: which root the weather service's chain ends in is not ours to choose, and the launcher
+# slot has room.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+# mbedTLS otherwise holds a 16 KB receive buffer and a 4 KB send buffer for the whole life of a
+# connection. Dynamic buffers are taken per TLS record and given back once it is read or sent: the
+# 16 KB is held only while a full-size record arrives. The incoming limit must stay 16384: the
+# weather service does not negotiate a smaller record. Applies to every TLS connection in this
+# image (the media component's too). Unmeasured on the console until a supervised run.
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=16384
+# Certificate dates are NOT checked while this stays unset (the IDF default): setting it makes
+# every TLS connection of the image fail while the clock is unset, the media component's
+# included. The weather fetch runs only once SNTP has set the clock, so it is safe to set for
+# weather alone; left to the owner of the other TLS client.
+# CONFIG_MBEDTLS_HAVE_TIME_DATE is not set
+# SNTP asks at once instead of after a random wait of up to 5 s (the IDF default, meant for
+# fleets of devices booting together): the weather channel starts SNTP when it is opened and its
+# header clock should not wait. No request waits for SNTP either way (the first reply's Date
+# header sets the clock if SNTP has not).
+CONFIG_LWIP_SNTP_STARTUP_DELAY=n

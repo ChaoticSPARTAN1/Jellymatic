@@ -94,6 +94,9 @@
 #define PJ_JF_ART_MIN 4096u
 #define PJ_JF_ART_CAP 12288u
 #define PJ_JF_TIMEOUT_MS 10000
+/* 1.6.0 (review H2): PlaybackInfo opens and probes a live channel before it answers, which can take longer than
+ * 10 s; if the console gave up first, the channel stayed open on the server with an id the console never saw. */
+#define PJ_JF_PLAYINFO_TIMEOUT_MS 30000
 /* The video stream's socket: connect, headers and every read. 10 s (the request timeout) meant a stalled
  * server or link froze the picture for 10 s before the first reopen (launcher 1.2.8 on the console); 6 s
  * still leaves the transcoder time to start answering. */
@@ -107,7 +110,7 @@
 #define PJ_JL_TX_RING 1024u   /* UART1's driver transmit ring: launcher_main.c buses_init, uart_driver_install(UART_NUM_1,4096,1024,...) */
 #define PJ_JL_SURE_MS 120u    /* the wait for the line to drain (1.3.6: was 30, 20 and 50 ms): a full ring and FIFO is 100 ms at 115,200 */
 #define PJ_JL_TX_ROOM 504u    /* 1.3.6: most bytes left waiting for the wire (7 data packets): the driver's ring never fills, 44 ms at 115,200 */
-/* 1.3.8 (the stream failed with 532 B free). A connection the console closes first stays in lwIP's
+/* 1.3.8 (console, 2026-11-10: the stream failed with 532 B free). A connection the console closes first stays in lwIP's
  * TIME_WAIT for 2 x CONFIG_LWIP_TCP_MSL = 120 s, a whole tcp_pcb on the heap each (MEMP_MEM_MALLOC: no count limit; the
  * oldest is only reclaimed when the heap itself is out). A connection per artwork request left ~90 of them (~22 KB)
  * after an art sync. The link's requests now share one kept connection; the server closes it, or it goes after this
@@ -123,8 +126,10 @@
 typedef struct {
     uint32_t jpeg_work[3100/4];               /* TJpgDec R0.01 pool: FIRST and word-aligned (it holds 16/32-bit tables) */
     char base_url[129],auth[384];
-    char http_url[560],stream_url[560];       /* one per task: they run at the same time */
-    char req_method[8],req_path[420],req_body[300],stream_path[420];
+    /* 1.6.0: the TV app's stream path carries a live stream id of up to 160 characters, and PlaybackInfo's body is
+     * about 400 bytes: stream_path 420 -> 600, stream_url 560 -> 740, req_body 300 -> 448 (508 bytes more in all). */
+    char http_url[560],stream_url[740];       /* one per task: they run at the same time */
+    char req_method[8],req_path[420],req_body[448],stream_path[600];
     uint8_t http_chunk[1024],stream_chunk[1024];
 } pj_jf_buffers;
 
@@ -150,6 +155,16 @@ static volatile uint32_t jl_http_new,jl_http_reused,jl_open_heap;
 static volatile uint32_t jl_open_tries;static volatile int jl_open_status;
 static uint32_t jl_low;
 static volatile uint16_t jl_tw_pcbs,jl_tcp_pcbs;
+/* 1.6.0 (review B2): the TV app's requests (channel pages, PlaybackInfo, the two closes) share one kept connection,
+ * as the Pocket link's do since 1.3.8: a channel change was four connections the console closed first, each a lwIP
+ * TIME_WAIT pcb for 120 s; now it is the stream's own connection only. Set by pj_jf_begin for TV. */
+static volatile int jf_keep;
+/* 1.6.0 (second review, N4): the PlaybackInfo that is out is no longer wanted by the app (set by pj_jf_tick from
+ * jf_app_request_unwanted). Its reply is waited for in 1 s slices: PJ_JF_UNWANTED_MS after nobody wants it, or at
+ * once when the app is ending, the wait is given up, so the next action is not held for up to 30 s. */
+static volatile int req_unwanted;
+#define PJ_JF_UNWANTED_MS 4000u
+static int settling; /* 1.6.0: pj_jf_settle has stopped the app for the hand-over to Games */
 static int closing; /* 1: pj_jf_end started, memory freed by pj_jf_poll once both tasks are gone;
                      * 2: freed, waiting for the idle task to free the tasks' stacks too */
 static TickType_t closed_at;
@@ -196,10 +211,11 @@ static inline void diag_ring_sample(void) {
 }
 
 /* ---------- HTTP ---------- */
-static esp_http_client_handle_t open_client(char *url,size_t url_size,const char *path,int method_post,int timeout_ms) {
+/* method: 0 GET, 1 POST, 2 DELETE (1.6.0: the TV app stops a channel's conversion with one). */
+static esp_http_client_handle_t open_client(char *url,size_t url_size,const char *path,int method,int timeout_ms) {
     snprintf(url,url_size,"%s%s",bufs->base_url,path);
     esp_http_client_config_t config={.url=url,.timeout_ms=timeout_ms,.buffer_size=1024,.buffer_size_tx=512,
-        .disable_auto_redirect=true,.method=method_post?HTTP_METHOD_POST:HTTP_METHOD_GET};
+        .disable_auto_redirect=true,.method=method==1?HTTP_METHOD_POST:method==2?HTTP_METHOD_DELETE:HTTP_METHOD_GET};
     esp_http_client_handle_t client=esp_http_client_init(&config);
     if(client)esp_http_client_set_header(client,"Authorization",bufs->auth);
     return client;
@@ -214,8 +230,24 @@ static int http_exchange(esp_http_client_handle_t client,int post,int *answered)
     *answered=0;
     if(post)esp_http_client_set_header(client,"Content-Type","application/json");
     if(esp_http_client_open(client,(int)body)!=ESP_OK||
-       (body&&esp_http_client_write(client,bufs->req_body,(int)body)!=(int)body)||
-       esp_http_client_fetch_headers(client)<0)return -1;
+       (body&&esp_http_client_write(client,bufs->req_body,(int)body)!=(int)body))return -1;
+    if(strstr(bufs->req_path,"/PlaybackInfo")) {
+        /* N4: the server may sit on this one for up to PJ_JF_PLAYINFO_TIMEOUT_MS. Waited for in 1 s slices (a slice
+         * that times out returns -ESP_ERR_HTTP_EAGAIN and the next call goes on where it stopped), given up when the
+         * app ends or PJ_JF_UNWANTED_MS after nobody waits for it any more. */
+        TickType_t t0=xTaskGetTickCount(),unwanted_at=0;int64_t got_headers;
+        esp_http_client_set_timeout_ms(client,1000);
+        for(;;) {
+            got_headers=esp_http_client_fetch_headers(client);
+            if(got_headers!=-ESP_ERR_HTTP_EAGAIN)break;
+            if(tasks_stop||(TickType_t)(xTaskGetTickCount()-t0)>=pdMS_TO_TICKS(PJ_JF_PLAYINFO_TIMEOUT_MS))return -1;
+            if(!req_unwanted)unwanted_at=0;
+            else if(!unwanted_at)unwanted_at=xTaskGetTickCount()|1u;
+            else if((TickType_t)(xTaskGetTickCount()-unwanted_at)>=pdMS_TO_TICKS(PJ_JF_UNWANTED_MS))return -1;
+        }
+        esp_http_client_set_timeout_ms(client,PJ_JF_TIMEOUT_MS);
+        if(got_headers<0)return -1;
+    } else if(esp_http_client_fetch_headers(client)<0)return -1;
     *answered=1;
     int status=esp_http_client_get_status_code(client);
     int64_t length=esp_http_client_get_content_length(client),got=0;
@@ -240,12 +272,36 @@ static void http_task(void *unused) {
         if(tasks_stop&&!req_busy)break; /* a request queued before leaving (Stopped) still goes out */
         /* The kept connection goes while a title plays (the stream's own connection has its memory) and when idle long
          * enough that the server may have closed it. */
+        /* (1.6.0, second review N5: TV's kept connection goes when a stream opens too, as the link's does, so the
+         * heap's low mark at a stream's start is not lowered by it) */
         if(keep&&(stream_sb||(TickType_t)(xTaskGetTickCount()-keep_at)>=pdMS_TO_TICKS(PJ_JL_KEEP_MS)))http_drop(&keep);
         if(xSemaphoreTake(req_go,pdMS_TO_TICKS(200))!=pdTRUE)continue;
-        int post=bufs->req_method[0]=='P',status=-1,answered=0;
+        /* 1.6.0: a DELETE (the TV app's "stop this conversion") goes like a POST, on its own connection, with no body */
+        int del=bufs->req_method[0]=='D',post=bufs->req_method[0]=='P'||del,status=-1,answered=0;
+        int timeout=strstr(bufs->req_path,"/PlaybackInfo")?PJ_JF_PLAYINFO_TIMEOUT_MS:PJ_JF_TIMEOUT_MS; /* 1.6.0 (review H2) */
         if(!plink||post) {
-            esp_http_client_handle_t client=open_client(bufs->http_url,sizeof(bufs->http_url),bufs->req_path,post,PJ_JF_TIMEOUT_MS);
-            if(client){status=http_exchange(client,post,&answered);http_drop(&client);}
+            /* The app: a connection per request, as before. 1.6.0, the TV app only (jf_keep): one kept connection for
+             * all of its requests; one the server had closed fails at once without an answer and is tried once more
+             * on a new one (the 1.3.8 rule of the Pocket link's kept connection). */
+            int kept=!plink&&jf_keep;
+            for(int attempt=0;attempt<2;attempt++) {
+                int reused=kept&&keep!=NULL;
+                if(reused) {
+                    snprintf(bufs->http_url,sizeof(bufs->http_url),"%s%s",bufs->base_url,bufs->req_path);
+                    if(esp_http_client_set_url(keep,bufs->http_url)!=ESP_OK||
+                       esp_http_client_set_method(keep,del?HTTP_METHOD_DELETE:post?HTTP_METHOD_POST:HTTP_METHOD_GET)!=ESP_OK||
+                       esp_http_client_set_timeout_ms(keep,timeout)!=ESP_OK){http_drop(&keep);reused=0;}
+                }
+                esp_http_client_handle_t client=reused?keep:open_client(bufs->http_url,sizeof(bufs->http_url),bufs->req_path,del?2:post?1:0,timeout);
+                if(!client)break;
+                if(kept)keep=client;
+                TickType_t sent_at=xTaskGetTickCount();
+                status=http_exchange(client,post&&!del,&answered);
+                if(!kept){http_drop(&client);break;}
+                if(status>0){keep_at=xTaskGetTickCount();break;} /* the whole reply was read: the connection is kept */
+                http_drop(&keep);
+                if(answered||!reused||(TickType_t)(xTaskGetTickCount()-sent_at)>=pdMS_TO_TICKS(2000))break;
+            }
         } else {
             /* A stream that was just closed lets its connection go first (its unread window is Wi-Fi buffers):
              * never a library request and a stream's connection at once. Bounded: a stuck stream read is 6 s. */
@@ -295,7 +351,7 @@ static void stream_task(void *unused) {
         stream_conn=1; /* 1.3.8: until the connection is gone (the link's requests wait for it) */
         esp_http_client_handle_t client=NULL;
         int result=-2,opened=0;
-        /* 1.4.0 (the first Play over the Pocket link failed at once with "the stream failed", the
+        /* 1.4.0 (console, 2026-11-10: the first Play over the Pocket link failed at once with "the stream failed", the
          * second, 2 s later, played): the Pocket link opens its stream up to PJ_JL_OPEN_TRIES times, PJ_JL_OPEN_GAP_MS
          * apart, before it fails: the server's first transcode of a title can be slow to answer or refuse while it
          * starts, and a connection can fail once. Only a connection that failed, timed out, or a 5xx answer is tried
@@ -671,6 +727,10 @@ static void release(void) {
 }
 static uint8_t jf_pocket_link; /* 1.3.0: the FPGA has the link bridge: the app's menu offers Pocket link */
 void pj_jf_set_pocket_link(int on){jf_pocket_link=(uint8_t)(on!=0);}
+static uint8_t jf_mode; /* 1.6.0: which app the next pj_jf_begin starts: JF_MODE_JELLYFIN, JF_MODE_TV, JF_MODE_TUBE */
+void pj_jf_set_mode(int mode){jf_mode=(uint8_t)(mode==JF_MODE_TV||mode==JF_MODE_TUBE?mode:JF_MODE_JELLYFIN);}
+static uint8_t jf_tv_resume; /* JF_TV_RESUME_*: for the next TV start only */
+void pj_jf_set_tv_resume(int dir){jf_tv_resume=(uint8_t)(dir>0?JF_TV_RESUME_NEXT:dir<0?JF_TV_RESUME_PREV:JF_TV_RESUME_NONE);}
 int pj_jf_begin(const pj_jf_creds *c,uint16_t *fb,uint32_t now,int sound) {
     if(closing)return -6; /* the previous session is still letting go */
     if(app||bufs||plink||!c||!c->url[0])return -1;
@@ -697,8 +757,12 @@ int pj_jf_begin(const pj_jf_creds *c,uint16_t *fb,uint32_t now,int sound) {
     cfg.fb=fb;cfg.scratch=fb;cfg.scratch_bytes=160u*144u*2u;cfg.art=NULL;cfg.art_cap=0;
     cfg.font_alpha=pj_font_alpha;cfg.font_advance=pj_font_advance;
     cfg.pocket_link=jf_pocket_link;
+    cfg.mode=jf_mode;
+    if(jf_mode==JF_MODE_TV){cfg.wx_row=1;cfg.tv_resume=jf_tv_resume;} /* the Local Weather row; back from that channel by Up/Down */
+    jf_tv_resume=0;jf_keep=jf_mode==JF_MODE_TV;settling=0;
     jf_app_start(app,&io,&cfg,now);
-    art_tried_at=now;art_claim(); /* artwork gets what is left above the reserve (largest block, so it really fits) */
+    art_tried_at=now;
+    if(jf_mode!=JF_MODE_TV)art_claim(); /* artwork gets what is left above the reserve (largest block, so it really fits); TV draws none */
     return 0;
 }
 int pj_jf_active(void){return app!=NULL&&!closing;}
@@ -708,12 +772,34 @@ int pj_jf_wants_exit(void){return app&&!closing&&app->screen==JF_S_EXIT;}
 int pj_jf_exit_to_setup(void){return app&&!closing&&app->screen==JF_S_EXIT&&app->exit_to==JF_EXIT_SETUP;}
 int pj_jf_exit_to_find(void){return app&&!closing&&app->screen==JF_S_EXIT&&app->exit_to==JF_EXIT_FIND;}
 int pj_jf_exit_to_plink(void){return app&&!closing&&app->screen==JF_S_EXIT&&app->exit_to==JF_EXIT_PLINK;}
+int pj_jf_exit_to_weather(void){return app&&!closing&&app->screen==JF_S_EXIT&&app->exit_to==JF_EXIT_WEATHER;}
+/* 1.6.0 (review H2): the hand-over to Games with TV or ChromaTube open. The first call stops what plays and queues
+ * the server closes; every call takes a finished reply and ticks the app (which sends the next close). 1 while a
+ * close, or a PlaybackInfo whose live stream must still be closed, is owed; the launcher bounds the wait. Jellyfin
+ * mode: 0 at once, nothing done. */
+int pj_jf_settle(uint32_t now) {
+    if(!app||closing||app->cfg.mode==JF_MODE_JELLYFIN)return 0;
+    if(!settling){settling=1;jf_app_quiesce(app);}
+    if(req_done){int status=req_status;req_done=0;jf_app_reply(app,status);}
+    jf_app_tick(app,now);
+    return jf_app_owes(app);
+}
+/* 1.6.0: the sound path for the launcher's Local Weather screen, which runs with no app in memory: the same ring,
+ * task and I2S channel the videos use (IMA ADPCM blocks at `rate`). pj_snd_start: 0 started, -1 not now (asked
+ * again). pj_snd_write: bytes taken. pj_snd_service: every pass while it was used and no app runs (frees a
+ * stopped channel and a finished task's ring). pj_snd_stop: the task leaves. */
+int pj_snd_start(uint32_t rate){if(app||plink||closing)return -1;sound_fpga=1;return platform_audio_start(NULL,rate);}
+size_t pj_snd_write(void *ctx,const uint8_t *adpcm,size_t size,int block_start){return platform_audio_write(ctx,adpcm,size,block_start);}
+void pj_snd_service(void){if(!app)audio_service();}
+void pj_snd_stop(void){if(app)return;platform_audio_stop(NULL);audio_teardown();}
+int pj_snd_alive(void){return audio_alive||audio_ring!=NULL||audio_tx!=NULL;}
 void pj_jf_link(int up){if(app&&!closing)jf_app_set_link(app,up);}
 void pj_jf_press(uint16_t pressed){if(app)jf_app_press(app,pressed);}
 /* Returns 1 when the frame changed and should be sent to the overlay. */
 int pj_jf_tick(uint16_t *fb,uint32_t now) {
     if(!app||closing)return 0;
     if(req_done){int status=req_status;req_done=0;jf_app_reply(app,status);}
+    req_unwanted=jf_app_request_unwanted(app); /* 1.6.0 (N4): for the HTTP task */
     if(audio_alive&&!audio_quit&&!app->playing)audio_teardown(); /* the video ended: the sound task leaves */
     audio_service(); /* a stopped channel, or a finished task's ring and channel, go back */
     if(stream_sb&&!app->playing) { /* the video ended: its buffer goes back, the artwork takes its place */
@@ -721,7 +807,7 @@ int pj_jf_tick(uint16_t *fb,uint32_t now) {
         vStreamBufferDelete(stream_sb);stream_sb=NULL; /* the stream task checks the generation first */
         xSemaphoreGive(stream_lock);
     }
-    if(!art&&!stream_sb&&!app->playing&&app->request==JF_R_NONE&&(art_wanted||(uint32_t)(now-art_tried_at)>=3000u)) {
+    if(app->cfg.mode!=JF_MODE_TV&&!art&&!stream_sb&&!app->playing&&app->request==JF_R_NONE&&(art_wanted||(uint32_t)(now-art_tried_at)>=3000u)) {
         art_tried_at=now;art_claim(); /* the video ended, or there was no room before: pictures again */
     }
     if(!jf_app_tick(app,now))return 0;
@@ -776,7 +862,7 @@ static pj_pld_printer jl_said;      /* 1.3.6: which link diagnostics lines have 
 static char jl_user[33];
 static uint32_t jl_failed_at;static uint8_t jl_failed;
 static int jl_request(void *ctx,const char *path){return platform_request(ctx,"GET",path,NULL);}
-/* 1.3.6: what waits for the wire, counted here. The driver's own figure
+/* 1.3.6 (second review): what waits for the wire, counted here. The driver's own figure
  * (uart_get_tx_buffer_free_size, IDF 5.3 uart.c: tx_buf_size - tx_len_tot) knows only the one packet it is moving
  * into the FIFO, not the packets queued behind it in its ring, so it could neither say that the ring is empty nor how
  * much the bridge is still to be sent. The line has no flow control and never pauses while bytes wait, so every byte
@@ -800,7 +886,7 @@ static size_t jl_driver_pending(void) {
     size_t ring=room<PJ_JL_TX_RING?PJ_JL_TX_RING-room:0,fifo_free=uart_ll_get_txfifo_len(&UART1);
     return ring+(fifo_free<UART_LL_FIFO_DEF_LEN?UART_LL_FIFO_DEF_LEN-fifo_free:0);
 }
-/* 1.3.1: bytes queued for the FPGA but not on the wire yet, for the credit; 1.3.6: the larger of the two
+/* 1.3.1: bytes queued for the FPGA but not on the wire yet, for the credit (review B); 1.3.6: the larger of the two
  * counts above, and 0 only when the ring and the FIFO are empty (the fast rate is asked for and taken only then). */
 static size_t jl_tx_pending(void *ctx) {
     (void)ctx;size_t driver=jl_driver_pending(),line=jl_line_pending();
@@ -815,9 +901,9 @@ static int jl_fpga_send(void *ctx,const uint8_t *packet,size_t size) {
     if(uart_write_bytes(UART_NUM_1,(const char *)packet,size)!=(int)size)return 0;
     jl_line_add(size);return 1;
 }
-/* 1.3.6: the line is empty: nothing in the driver's ring or the FIFO, the last byte gone from the
+/* 1.3.6 (second review): the line is empty: nothing in the driver's ring or the FIFO, the last byte gone from the
  * shifter. Bounded by PJ_JL_SURE_MS a wait; 0 when it did not empty (the UART is stuck).
- * Note: "FIFO empty and tx_len_tot 0 means the ring is empty" holds only because the UART1 interrupt and this
+ * Re-review: "FIFO empty and tx_len_tot 0 means the ring is empty" holds only because the UART1 interrupt and this
  * task run on the same core. Between two packets the driver's tx_len_tot is 0 while its ring still holds the next
  * one; it is the interrupt that moves it into the FIFO (IDF 5.3 uart.c, UART_INTR_TXFIFO_EMPTY), and on one core a
  * pending interrupt has always run before this task's next instruction, so the task never looks in between. Both are
@@ -834,8 +920,8 @@ static int jl_drained(void) {
     }
     return 0;
 }
-/* 1.3.1: the leave must not be dropped: the line drains, the packet is queued, the line drains again.
- * 1.3.6: when the line does not drain first (a stuck UART only) the leave is NOT written at all and 0 is
+/* 1.3.1: the leave must not be dropped (review A): the line drains, the packet is queued, the line drains again.
+ * Re-review of 1.3.6: when the line does not drain first (a stuck UART only) the leave is NOT written at all and 0 is
  * returned. Left that way on purpose: bytes behind a ring that does not move would not reach the bridge either, and
  * uart_write_bytes waits without limit for room in a full ring, which would stop the loop that feeds the watchdog.
  * The bridge ends media mode by itself 3 s after the last heartbeat (and is back at 115,200 250 ms after an
@@ -855,7 +941,7 @@ static void jl_rate(uint32_t baud) {
     uart_set_baudrate(UART_NUM_1,baud);jl_line_baud=baud;jl_line_until=esp_timer_get_time();jl_line_add(left);
 }
 /* The keyed fast UART: changed only once what was queued at the old rate has gone out. 0 = the stock 115,200.
- * 1.3.6: to the fast rate only with the line proven empty (was: a 20 ms wait whose result was not
+ * 1.3.6 (second review): to the fast rate only with the line proven empty (was: a 20 ms wait whose result was not
  * looked at); if it is not, the rate stays at 115,200 and the gateway finds out, because the bridge never confirms
  * (PJ_PF_OFF, 500 ms later). The gateway asks only with its ring empty, so this is a UART that is stuck. Back to
  * 115,200 always, after the same wait: the stock rate must hold whatever happened. */
@@ -997,7 +1083,7 @@ int pj_jl_streaming(void){return plink!=NULL&&!closing&&plink->stream_state==PJ_
  * failure on the console says in which stage and on what evidence, instead of "stopped". */
 int pj_jl_trace(char *out,size_t size) {
     static uint32_t last_key=0xffffffffu;static const char *last_why;
-    if(jl_leave_unsent) { /* 1.3.6: one line for the leaves a stuck UART kept back (jl_send_sure), link open or not */
+    if(jl_leave_unsent) { /* 1.3.6 re-review: one line for the leaves a stuck UART kept back (jl_send_sure), link open or not */
         snprintf(out,size,"plink leave not-sent n=%u uart1 not drained, bridge leaves media mode by its 3 s guard",(unsigned)jl_leave_unsent);
         jl_leave_unsent=0;return 1;
     }

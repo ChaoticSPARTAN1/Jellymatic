@@ -21,6 +21,16 @@
  * into the DMA at once, even while the DMA still held sound (24 ms of lead thrown away per gap);
  * the default (1) is 1.2.7's task, which waits for the ring while the DMA plays what it has.
  * STALL_EVERY / STALL_MS hold the main loop (not the network or the DMA) after a picture.
+ * MODE=tv / MODE=tube (launcher 1.6.0) start the TV or the ChromaTube app; WX=1 gives the TV list its Local Weather
+ * row (choosing it leaves the app with JF_EXIT_WEATHER); TV_RESUME=next/prev starts the app as the launcher does
+ * after that channel was left by Up/Down. A POST without a body is written with "BODY 0", a DELETE without.
+ * A reply may be up to 64 KB and is handed over in 1 KB pieces like the ESP32's HTTP task ("REP <status> <n> [ms]":
+ * the optional third number holds this reply back that long, whatever DELAY_MS says). The script step
+ * `quiesce` runs the hand-over to Games (jf_app_quiesce, then ticks while jf_app_owes, at most 1.5 s).
+ * SERVE_BPS / SERVE_BURST_S / SERVE_X100 model the server's own pace as measured on the owner's server: the stream
+ * (SERVE_BPS bytes for a second of video) is offered SERVE_X100/100 times faster than real time for its first
+ * SERVE_BURST_S seconds of video, then in real time; the link (RATE) still limits what arrives. A PlaybackInfo that
+ * nobody waits for any more (jf_app_request_unwanted) is dropped after 4 s, as the ESP32's HTTP task does (-1).
  * Script (argv[1]): comma list of  wait:<ms>  press:<A|B|UP|DOWN|LEFT|RIGHT|START|SELECT>
  *   shot:<name> (writes <outdir>/<name>.ppm)  expect:<screen number>  state (prints a line)
  */
@@ -58,6 +68,7 @@ static int req(void *ctx,const char *method,const char *path,const char *body) {
     (void)ctx;requests++;
     printf("REQ %s %s\n",method?method:"GET",path);
     if(body)printf("BODY %u\n%s",(unsigned)strlen(body),body);
+    else if(method&&!strcmp(method,"POST"))printf("BODY 0\n"); /* 1.6.0: POST /LiveStreams/Close has none */
     fflush(stdout);
     return 0;
 }
@@ -72,13 +83,22 @@ static uint32_t decode_ms,frame_send_ms,waits;
  * and the sound DMA run on meanwhile, the player does not. */
 static uint32_t stall_every,stall_ms,stall_next;static unsigned long stalls;
 static uint32_t delay_ms;
-static int held,held_status;static unsigned held_n;static uint32_t held_due;static uint8_t held_buf[JF_BUF+1];
+static int held,held_status;static unsigned held_n;static uint32_t held_due;static uint8_t held_buf[65536];
 /* The driver's answer to the outstanding request, read now (it is held until due, like Wi-Fi). */
 static void take_reply(void) {
     char line[64];
-    if(!fgets(line,sizeof(line),stdin)||sscanf(line,"REP %d %u",&held_status,&held_n)!=2){fprintf(stderr,"driver gone\n");exit(3);}
+    unsigned own_delay=0;int fields=fgets(line,sizeof(line),stdin)?sscanf(line,"REP %d %u %u",&held_status,&held_n,&own_delay):0;
+    if(fields<2){fprintf(stderr,"driver gone\n");exit(3);}
     if(held_n>sizeof(held_buf)||fread(held_buf,1,held_n,stdin)!=held_n){fprintf(stderr,"bad reply\n");exit(3);}
-    held=1;held_due=now_ms_sim+delay_ms;
+    held=1;held_due=now_ms_sim+(fields==3?own_delay:delay_ms);
+}
+static uint32_t serve_bps,serve_burst_s,serve_x100=100,stream_open_ms;static uint64_t stream_served;
+/* Bytes of the stream the server has offered by now (its own pace); everything when no pace is modelled. */
+static uint64_t serve_offered(void) {
+    if(!serve_bps)return ~(uint64_t)0;
+    uint64_t ms=now_ms_sim-stream_open_ms,burst_ms=(uint64_t)serve_burst_s*100000u/serve_x100; /* wall time the burst takes */
+    uint64_t video_ms=ms<burst_ms?ms*serve_x100/100u:(uint64_t)serve_burst_s*1000u+(ms-burst_ms);
+    return video_ms*serve_bps/1000u;
 }
 static int stream_open(void *ctx,const char *path) {
     (void)ctx;streams++;
@@ -91,21 +111,25 @@ static int stream_open(void *ctx,const char *path) {
     char line[64];unsigned n;
     if(!fgets(line,sizeof(line),stdin)||sscanf(line,"FILE %u",&n)!=1||n>=1024)return -1;
     char name[1024];if(fread(name,1,n,stdin)!=n)return -1;name[n]=0;
-    stream_file=fopen(name,"rb");stream_budget_us=0;net_have=0;net_end=0;
+    stream_file=fopen(name,"rb");stream_budget_us=0;net_have=0;net_end=0;stream_open_ms=now_ms_sim;stream_served=0;
     return stream_file?0:-1;
 }
 static void stream_close(void *ctx){(void)ctx;if(stream_file){fclose(stream_file);stream_file=NULL;}}
-static uint32_t fail_at;static int failed_once;
+static uint32_t fail_at,dip_at,dip_ms;static int failed_once;
 static void net_pump(void) {
     if(!stream_file||net_end)return;
     if(fail_at&&now_ms_sim>=fail_at&&!failed_once){failed_once=1;net_end=-2;return;} /* the connection drops once */
     if(gap_every&&(now_ms_sim%gap_every)<gap_ms)return; /* a Wi-Fi dip */
+    if(dip_ms&&now_ms_sim>=dip_at&&now_ms_sim-dip_at<dip_ms)return; /* DIP_AT_MS / DIP_MS: one dip, once */
     while(net_have<net_cap&&net_have+net_chunk<=sizeof(netbuf)) {
         size_t allowed=(size_t)(stream_budget_us*stream_rate/1000000u);
+        uint64_t offered=serve_offered();
+        if(offered<=stream_served)break; /* the server has not sent more yet */
+        if(allowed>offered-stream_served)allowed=(size_t)(offered-stream_served);
         if(!allowed)break; /* nothing has arrived yet */
         size_t n=fread(netbuf+net_have,1,allowed<net_chunk?allowed:net_chunk,stream_file);
         if(!n){net_end=feof(stream_file)?-1:-2;break;}
-        stream_budget_us-=(uint64_t)n*1000000u/stream_rate;net_have+=n;
+        stream_budget_us-=(uint64_t)n*1000000u/stream_rate;net_have+=n;stream_served+=n;
     }
 }
 static int stream_read(void *ctx,uint8_t *buf,size_t max) {
@@ -252,6 +276,14 @@ static void state(void) {
                 (unsigned long)app.tracks_seq,app.tracks_ok,app.audio_count,app.sub_count,app.subs_failed,app.switching);
         fprintf(stderr,"NOTE warn=%u on=%u text=%s\n",app.note_warn,app.note_until!=0,app.note);
     }
+    {   /* 1.6.0: the TV app (and PlaybackInfo's ids for ChromaTube) */
+        const char *number="",*name="";
+        if(app.cfg.mode==JF_MODE_TV)jf_tv_label(&app,&number,&name);
+        fprintf(stderr,"TV mode=%u state=%u close=%u opened=%u exit=%u err=%u stepped=%u focus=%u start=%lu total=%lu count=%u banner=%u pictured=%u source=%s live=%s "
+                "audio_on=%u thinned=%lu catchup=%lu number=%s name=%s\n",app.cfg.mode,app.tv_state,app.tv_close,app.tv_opened,app.tv_exit,app.tv_list_err,app.tv_stepped,app.folder.focus,
+                (unsigned long)app.folder_start,(unsigned long)app.folder_total,app.folder.count,(unsigned)(app.tv_banner_until!=0||app.tv_banner_armed),
+                app.pictured,app.source_id[0]?app.source_id:"-",app.live_id[0]?app.live_id:"-",app.audio_on,(unsigned long)app.thinned,(unsigned long)app.audio_catchup,number[0]?number:"-",name[0]?name:"-");
+    }
     jf_label l;int has=jf_focus_label(&app,&l);
     fprintf(stderr,"UI screen=%u menu_sel=%u menu_page=%u big=%u audio_lang=%u subs=%u aidx=%d sidx=%d scroll=%d over=%d draws_full=%lu draws_label=%lu label_decodes=%lu label_mismatch=%lu label=%s\n",
         app.screen,app.menu_sel,app.menu_page,app.big_cards,app.audio_lang,app.subs,(int)app.audio_index,(int)app.sub_index,app.scroll_px,has?l.over:0,draws_full,draws_label,label_decodes,label_mismatch,has?l.text:"");
@@ -272,9 +304,17 @@ static void run(uint32_t ms) {
             }
         }
         if(app.request!=JF_R_NONE&&!held)take_reply();
+        {   /* N4: a PlaybackInfo nobody waits for is given up after 4 s (the ESP32's HTTP task: -1, nothing read) */
+            static uint32_t unwanted_since;static int unwanted;
+            if(held&&jf_app_request_unwanted(&app)) {
+                if(!unwanted){unwanted=1;unwanted_since=now_ms_sim;}
+                else if(now_ms_sim-unwanted_since>=4000u){held=0;unwanted=0;jf_app_reply(&app,-1);}
+            } else unwanted=0;
+        }
         if(held&&(int32_t)(now_ms_sim-held_due)>=0) {
             held=0;int status=held_status;
-            if(!jf_app_reply_data(&app,held_buf,held_n))status=-3;
+            for(unsigned at=0;at<held_n;at+=1024u) /* 1 KB pieces, as the ESP32's HTTP task hands them over */
+                if(!jf_app_reply_data(&app,held_buf+at,held_n-at<1024u?held_n-at:1024u)){status=-3;break;}
             jf_app_reply(&app,status);
         }
     }
@@ -288,6 +328,8 @@ int main(int argc,char **argv) {
     if(getenv("RATE"))stream_rate=(uint32_t)atoi(getenv("RATE"));
     if(getenv("DELAY_MS"))delay_ms=(uint32_t)atoi(getenv("DELAY_MS"));
     if(getenv("FAIL_AT_MS"))fail_at=now_ms_sim+(uint32_t)atoi(getenv("FAIL_AT_MS"));
+    if(getenv("DIP_AT_MS"))dip_at=now_ms_sim+(uint32_t)atoi(getenv("DIP_AT_MS"));
+    if(getenv("DIP_MS"))dip_ms=(uint32_t)atoi(getenv("DIP_MS"));
     if(getenv("GAP_EVERY"))gap_every=(uint32_t)atoi(getenv("GAP_EVERY"));
     if(getenv("GAP_MS"))gap_ms=(uint32_t)atoi(getenv("GAP_MS"));
     live_draw=getenv("LIVE_DRAW")!=NULL;
@@ -297,6 +339,10 @@ int main(int argc,char **argv) {
     if(getenv("STALL_EVERY"))stall_every=(uint32_t)atoi(getenv("STALL_EVERY"));
     if(getenv("STALL_MS"))stall_ms=(uint32_t)atoi(getenv("STALL_MS"));
     stall_next=now_ms_sim+stall_every;
+    if(getenv("SERVE_BPS"))serve_bps=(uint32_t)atoi(getenv("SERVE_BPS"));
+    if(getenv("SERVE_BURST_S"))serve_burst_s=(uint32_t)atoi(getenv("SERVE_BURST_S"));
+    if(getenv("SERVE_X100"))serve_x100=(uint32_t)atoi(getenv("SERVE_X100"));
+    if(!serve_x100)serve_x100=100;
     if(getenv("NET_BUF"))net_cap=(size_t)atoi(getenv("NET_BUF"));
     if(getenv("NET_CHUNK"))net_chunk=(size_t)atoi(getenv("NET_CHUNK"));
     if(net_cap>16384)net_cap=16384;
@@ -305,6 +351,12 @@ int main(int argc,char **argv) {
     jf_platform io={0,req,stream_open,stream_close,stream_read,decode,NULL,NULL,NULL,NULL,NULL,NULL};
     jf_config cfg;memset(&cfg,0,sizeof(cfg));
     cfg.pocket_link=getenv("POCKET_LINK")!=NULL; /* 1.3.0: the link FPGA (18.41): the menu offers Pocket link */
+    {   /* 1.6.0: which app; the TV app's built-in channel */
+        const char *mode=getenv("MODE"),*resume=getenv("TV_RESUME");
+        cfg.mode=(uint8_t)(mode&&!strcmp(mode,"tv")?JF_MODE_TV:mode&&!strcmp(mode,"tube")?JF_MODE_TUBE:JF_MODE_JELLYFIN);
+        cfg.wx_row=getenv("WX")!=NULL;
+        cfg.tv_resume=(uint8_t)(resume&&!strcmp(resume,"next")?JF_TV_RESUME_NEXT:resume&&!strcmp(resume,"prev")?JF_TV_RESUME_PREV:JF_TV_RESUME_NONE);
+    }
     audio_model=getenv("AUDIO")!=NULL;
     if(audio_model) {
         io.audio_start=audio_start;io.audio_write=audio_write;io.audio_played=audio_played;
@@ -332,6 +384,12 @@ int main(int argc,char **argv) {
             for(unsigned b=0;b<9;b++)if(!strcmp(step+6,names[b]))jf_app_press(&app,(uint16_t)(1u<<b));
             run(50);
         } else if(!strncmp(step,"link:",5)){jf_app_set_link(&app,atoi(step+5));run(step_ms);} /* the Wi-Fi link down (0) / up (1) */
+        else if(!strcmp(step,"quiesce")) { /* 1.6.0: the hand-over to Games with the app open, as the launcher runs it */
+            uint32_t t0=now_ms_sim;
+            jf_app_quiesce(&app);
+            while(jf_app_owes(&app)&&now_ms_sim-t0<1500u)run(step_ms);
+            fprintf(stderr,"QUIESCE owes=%d ms=%lu\n",jf_app_owes(&app),(unsigned long)(now_ms_sim-t0));
+        }
         else if(!strncmp(step,"shot:",5))shot(step+5);
         else if(!strcmp(step,"state"))state();
         else if(!strncmp(step,"expect:",7)&&app.screen!=(unsigned)atoi(step+7)){state();fprintf(stderr,"EXPECT FAILED %s\n",step);return 1;}

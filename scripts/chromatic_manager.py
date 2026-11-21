@@ -105,14 +105,37 @@ SLOT = (0x260000, 0x400000)
 # switch-off, erased by remove. Each sector is written on its own, so one always stays valid.
 PROVISION = (0x3FE000, 0x400000)
 PROVISION_A, PROVISION_B = (0x3FE000, 0x3FF000), (0x3FF000, 0x400000)
-SLOT_APP = (SLOT[0], PROVISION[0])
+# The weather location for launcher 1.6.3+ (chromatic_weather_location, wx_place.h): two sectors holding
+# the same 256-byte record, just below the setup record. Kept by install, update, downgrade and switch-off
+# (the launcher area below ends there), erased by remove and restore. Older launchers never read them;
+# blank means the launcher's compiled-in place (1.6.4+: Orlando, FL). Never compared with other images or shown; left
+# out of backups and closed journals.
+LOCATION = (0x3FC000, 0x3FE000)
+LOCATION_A, LOCATION_B = (0x3FC000, 0x3FD000), (0x3FD000, 0x3FE000)
+# The apps record for launcher 1.6.4+ (chromatic_apps, apps_record.h): which optional rows the start-up menu shows (TV,
+# ChromaTube) and whether TV lists the server's Live TV channels. Two sectors holding the same 32-byte record, just below
+# the weather location (the pair reserved for TV settings, docs/Design-notes.md). Kept by install, update, downgrade and
+# switch-off (the launcher area below ends there), erased by remove and restore. Older launchers never read them; blank
+# means the defaults (TV with Local Weather only, no ChromaTube). The console's own menu may write the other copy (Hide /
+# Show hidden apps), so the newer valid copy wins. Nothing personal: kept in backups like any other data.
+APPS = (0x3FA000, 0x3FC000)
+APPS_A, APPS_B = (0x3FA000, 0x3FB000), (0x3FB000, 0x3FC000)
+# The weather location's area pages for launcher 1.6.5+ (chromatic_location_pack, wx_lpack.h): a location pack, two
+# 8 KiB copies just below the apps record, A then B, the newer good copy wins. Written with the weather location (one
+# job), erased with it ("Use default"), kept by install, update, downgrade and switch-off, erased by remove and restore.
+# It belongs to one place (the console uses it only for the record that names the same point, office and grid), so it
+# is personal like the location: left out of backups and closed journals, never shown.
+PACK = (0x3F6000, 0x3FA000)
+PACK_A, PACK_B = (0x3F6000, 0x3F8000), (0x3F8000, 0x3FA000)
+SLOT_APP = (SLOT[0], PACK[0])  # the launcher image area (1,662,976 B; 16 KiB less than for 1.6.4, 32 KiB less than 1.6.3)
 STOCK_ROWS = ((1, 2, 0x9000, 0x6000, 'nvs'), (1, 1, 0xf000, 0x1000, 'phy_init'), (0, 0, 0x10000, 0x100000, 'factory'))
 LAUNCHER_ROW = (0, 0x10, SLOT[0], SLOT[1] - SLOT[0], 'launcher')
 # The launcher bootloader is ESP-IDF v5.3. Newer stock apps of the same major version
 # boot from an older bootloader (IDF keeps that compatible); another major is refused.
 BOOTLOADER_IDF_MAJOR = 'v5.'
 # The pieces the console is identified by: together exactly the whole flash, in order.
-SEGMENTS = ((0, BOOT[0]), BOOT, TABLE, SETTINGS, APP, (APP[1], SLOT[0]), SLOT_APP, PROVISION_A, PROVISION_B)
+SEGMENTS = ((0, BOOT[0]), BOOT, TABLE, SETTINGS, APP, (APP[1], SLOT[0]), SLOT_APP, PACK, APPS, LOCATION, PROVISION_A,
+            PROVISION_B)
 # Settings (NVS, PHY data) and the console setup are always read, never compared with other
 # images or shown: they are the console's own, and only 36 KiB.
 ALWAYS_READ = (SETTINGS, PROVISION_A, PROVISION_B)
@@ -438,6 +461,9 @@ def restore_target(current, backup, release, source):
         if source is None:
             raise Refused('That backup has the launcher in it and no stock bootloader backup exists.')
         image = put(put(put(image, BOOT, span(source, BOOT)), TABLE, release.stock_table), SLOT, b'')
+    # Review L4 of 1.6.4: a backup taken while the menu was switched off (stock layout, kept by the guided update) still
+    # holds the apps sectors; restore erases them as it does everything else of the menu's.
+    image = put(put(image, APPS, b''), PACK, b'') if len(image) == SIZE else image
     image = image[:SETTINGS[0]] + span(current, SETTINGS) + image[SETTINGS[1]:]
     if describe(image, release).name not in STOCK_LAYOUT:
         raise Refused('That backup does not give a valid stock console.')
@@ -456,7 +482,10 @@ def ordered_regions(current, target, bootloader_last):
             start = None
     pieces = []
     for start, end in runs:
-        cut = sorted({start, end} | {edge for region in (BOOT, TABLE, SETTINGS, APP, SLOT, PROVISION_A, PROVISION_B)
+        # every record copy is a step of its own, written and checked on the chip by itself (the location pack's two
+        # copies too: review L1 of 1.6.5), so one cut write can never leave both copies of a record blank
+        cut = sorted({start, end} | {edge for region in (BOOT, TABLE, SETTINGS, APP, SLOT, PACK_A, PACK_B, APPS_A, APPS_B,
+                                                         LOCATION_A, LOCATION_B, PROVISION_A, PROVISION_B)
                                      for edge in region
                                      if start < edge < end})
         pieces += list(zip(cut, cut[1:]))
@@ -528,6 +557,16 @@ def reads_setup_v2(version):
         return False
 
 
+WEATHER_LOCATION_LAUNCHER = (1, 6, 3)  # the first launcher that reads the weather location record
+
+
+def reads_weather_location(version):
+    try:
+        return tuple(int(part) for part in str(version).split('.')) >= WEATHER_LOCATION_LAUNCHER
+    except ValueError:
+        return False
+
+
 MENU_WAITS_FROM = (1, 1, 2)  # 1.1.0 and 1.1.1 count down to stock; from 1.1.2 the menu waits for a choice
 
 
@@ -538,9 +577,22 @@ def menu_waits(version):
         return False
 
 
+def wl_first_install(image, target, release, saved_location):
+    """Is this a first install, where the owner is asked "Add Local Weather?": the console runs plain stock (no
+    start-up menu yet), the release has the channel's built-in Orlando default (1.6.4+), and there is no weather
+    location on the console or saved on this PC."""
+    import chromatic_weather_location as wl
+    if len(image) != SIZE or describe(image, release).name != 'stock' or not wl.shows_orlando(release.version):
+        return False
+    if span(image, LOCATION) != b'\xff' * (LOCATION[1] - LOCATION[0]):
+        return False
+    return wl.load_saved(saved_location) is None
+
+
 def without_setup(image):
-    """The image with the console-setup sectors erased: what backups and closed journals keep."""
-    return put(image, PROVISION, b'') if len(image) == SIZE else image
+    """The image with the console-setup sectors (and the weather location and its pack) erased: what backups and
+    closed journals keep."""
+    return put(put(put(image, PROVISION, b''), LOCATION, b''), PACK, b'') if len(image) == SIZE else image
 
 
 class ManagerJournal(Journal):
@@ -807,7 +859,7 @@ class Manager:
                 if region != APP:
                     offer(region, view[region[0]:region[1]])
         missing = [r for r in SEGMENTS if r not in parts]
-        unknown = sum(r[1] - r[0] for r in missing if r not in ALWAYS_READ)
+        unknown = sum(r[1] - r[0] for r in missing if r not in ALWAYS_READ + (LOCATION, APPS, PACK))  # the console's own records
         self.say(f'Reading {sum(r[1] - r[0] for r in missing) // 1024} KiB: the settings and console-setup areas '
                  '(never shown)' + (f', and {unknown // 1024} KiB that match no image this tool has' if unknown else '')
                  + '. The rest matches known images.')
@@ -899,6 +951,9 @@ class Manager:
             self.say(note)
         if state.name in ('installed', 'outdated', 'partial', 'dormant'):
             self.say(self.console_setup(image))
+            self.say(self.console_location(image, state.launcher_version))
+            self.say(self.console_apps(image, state))
+            self.keep_console_apps(image)  # the PC's copy follows the console (also a choice made on the console)
         if state.name == 'installed':
             self.say(fpga_status_line(chip))
         return EXIT_OK
@@ -1407,10 +1462,14 @@ class Manager:
             self.say(f'Stopped before any write: {error if not isinstance(error, KeyboardInterrupt) else "cancelled"}')
             return EXIT_REFUSED
 
-    def install(self, current=None):
-        """With `current`, uses that fresh read (same connection) instead of reading again."""
+    def install(self, current=None, was_version=None):
+        """With `current`, uses that fresh read (same connection) instead of reading again. `was_version`: the launcher
+        the console ran before a switch-off this tool did itself (the guided Official update, review M1 of 1.6.4): the
+        install defaults (this PC's weather migration, TV with Live TV and ChromaTube) are decided from it, since the
+        switched-off console no longer names a launcher."""
         def job():
             self.open_job_guard()
+            self.first_choice = None
             release = self.release_loader()
             identity, backups = self.unit_identity()
             image = current
@@ -1421,23 +1480,384 @@ class Manager:
             if not backed_up and not (self.last_read_full and image is self.last_image):
                 image = self.read()  # identify() already reads these in full; a backup only ever comes from a full read
             target = install_target(image, release)
+            shown_by = describe(image, release).launcher_version or was_version  # what the owner saw last
+            # The weather location (and its area pages) saved on this PC, when the console lost them (a removal, an
+            # official update, an older Manager): part of this same job, under the same Approve, written and checked
+            # with the launcher, before the boot watch and before the owner is told to choose Games.
+            located = self.saved_location_target(target)
+            if located is not None:
+                target = located
+                check_layout_change(image, target, (BOOT, TABLE, SLOT))
+            packed = self.saved_pack_target(target)
+            if packed is not None:
+                target = packed
+                check_layout_change(image, target, (BOOT, TABLE, SLOT))
+            # This PC's private weather migration (chromatic_weather_location.MIGRATION, absent on most PCs): a console
+            # whose older launcher showed a place of its own keeps it, with its area pages, in this same job and Approve.
+            # A record or pack already there is never overwritten.
+            migrated = None if located is not None else self.migration_target(image, target, release, shown_by)
+            if migrated is not None:
+                target, migrated_words = migrated
+                check_layout_change(image, target, (BOOT, TABLE, SLOT))
+            # A first install (a console without the menu, no weather location on it or on this PC): the owner's answer
+            # to "Add Local Weather?" (set before the Approve by the window or the text menu: first_weather).
+            first = None
+            if located is None and migrated is None and wl_first_install(image, target, release, LOCATION_FILE):
+                first = self.first_weather_target(target, release)
+                if first is not None:
+                    target, first_words = first
+                    check_layout_change(image, target, (BOOT, TABLE, SLOT))
+            # Launcher 1.6.4+: the apps record, in this same job and Approve, only when the console holds none (a choice
+            # already there, also one made on the console, is never overwritten): the copy saved on this PC, or, on a
+            # console whose launcher 1.6.0-1.6.3 showed TV (with the server's channels) and ChromaTube, exactly that, so
+            # nothing the owner has disappears. A new console gets nothing: the defaults (TV with Local Weather only).
+            apps = self.apps_install_target(image, target, release, shown_by)
+            if apps is not None:
+                target, apps_flags, apps_why = apps
+                check_layout_change(image, target, (BOOT, TABLE, SLOT))
             if target == image:
                 self.close_device()
                 self.say(f'Launcher {release.version} is already installed. Nothing written.')
+                self.keep_console_apps(image)
                 return EXIT_OK
             if not backed_up:
                 self.say('Backing up the stock firmware now on the console first.')
                 self.save_backup(image, self.device.identity())
+            if located is not None:
+                self.say('The console does not hold the weather location saved on this PC; this install writes your '
+                         'location too' + (', with its area pages.' if packed is not None else '.'))
+            elif packed is not None:
+                self.say('The console does not hold the area pages saved on this PC for its weather location; this '
+                         'install writes them too.')
+            for note in self.damaged_record_notes(target):  # review L5: left as it is, and said
+                self.say(note)
+            if migrated is not None:
+                self.say(f'This console\'s start-up menu {shown_by} shows the weather for its own place; launcher '
+                         f'{release.version} shows Orlando, FL by default, so this install also writes {migrated_words}, '
+                         'keeping it exactly so.')
+            if first is not None:
+                self.say(first_words)
+            if apps is not None:
+                import chromatic_apps as ap
+                self.say(('The console holds no apps choice; this install writes the one saved on this PC too: '
+                          if apps_why == 'saved' else
+                          'Local Weather skipped at this first install: '
+                          if apps_why == 'first' else
+                          f'This console\'s start-up menu {shown_by} shows TV and ChromaTube; '
+                          'this install keeps them exactly so: ') + ap.words(apps_flags) + '.')
             self.say('When the start-up menu appears on the console, leave it alone until this tool says it is '
                      'done (about 20 seconds after the menu appears).')
             result = self.run_job('install', image, target, True, self.launcher_started, identity)
             if result == EXIT_OK:
                 after = ('It is waiting on the console now: choose Games to play.' if menu_waits(release.version)
                          else 'It counts down on the console, then starts the games by itself.')
+                written = ' Your weather location was written with it.' if located is not None else ''
+                if migrated is not None:
+                    written = f' {migrated_words[0].upper()}{migrated_words[1:]} were written with it.'
+                    self.keep_written_weather(target)
+                if first is not None:
+                    written = ' Your Local Weather choice was written with it.'
+                    self.keep_written_weather(target)
+                if apps is not None:
+                    written += ' The apps choice was written with it.'
+                self.keep_console_apps(target)
                 self.say(f'Start-up menu {release.version} installed. The whole-flash check matches, and the menu '
-                         f'was seen running. {after}')
+                         f'was seen running.{written} {after}')
+            return result
+        try:
+            return self.guarded(job)
+        finally:
+            # Review L3 of 1.6.5: the window's first-install answer belongs to this one install. Whether it was read
+            # or the job stopped first (no console found, refused, a later step), it never waits for another install.
+            pending_first_weather(None)
+
+    # ---- the weather location (launcher 1.6.3+) ------------------------------------------
+    def saved_location_target(self, target):
+        """For an install: `target` with the weather location saved on this PC written into both
+        location sectors, when it is not already there; None when nothing needs writing (none saved,
+        or the console holds it). The location goes in with the launcher, as one job."""
+        import chromatic_weather_location as wl
+        place = wl.load_saved(LOCATION_FILE)
+        if place is None or len(target) != SIZE:
+            return None
+        a, b = span(target, LOCATION_A), span(target, LOCATION_B)
+        if wl.current(a, b)[0] == place and a == b:
+            return None
+        return wl.with_place(target, place, LOCATION_A, LOCATION_B)
+
+    @staticmethod
+    def damaged_record_notes(image):
+        """Lines for an install about a record area that holds bytes but no good copy (the apps record, the weather
+        location): it is left exactly as it is (the console shows the defaults for it), never overwritten by a default.
+        Review L5 of 1.6.4."""
+        import chromatic_apps as ap
+        import chromatic_weather_location as wl
+        notes = []
+        for name, (a_range, b_range), parse, fix in (
+                ('apps choice', (APPS_A, APPS_B), ap.current, 'Settings > Apps'),
+                ('weather location', (LOCATION_A, LOCATION_B), wl.current, 'Settings > Weather location')):
+            a, b = span(image, a_range), span(image, b_range)
+            erased = a == b'\xff' * len(a) and b == b'\xff' * len(b)
+            if not erased and parse(a, b)[0] is None:
+                notes.append(f'The console\'s {name} area holds something this tool cannot read; it is left as it is '
+                             f'(the menu uses its defaults). {fix} writes a good one.')
+        return notes
+
+    def saved_pack_target(self, target):
+        """For an install: `target` with the area pages (location pack) saved on this PC written into both pack copies,
+        when the console's weather location (in `target`) is the one they belong to and it does not hold them already;
+        None otherwise. A pack for another place is never written."""
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        pack = lp.load_saved(PACK_FILE)
+        if pack is None or len(target) != SIZE:
+            return None
+        place, _ = wl.current(span(target, LOCATION_A), span(target, LOCATION_B))
+        if place is None or not pack.binds(place):
+            return None
+        a, b = span(target, PACK_A), span(target, PACK_B)
+        if lp.current(a, b)[0] == pack and a == b:
+            return None
+        return lp.with_pack(target, pack, PACK_A, PACK_B)
+
+    def migration_target(self, before, target, release, shown_by):
+        """For an install of launcher 1.6.4+ (its default Orlando, FL): this PC's private weather migration (see
+        chromatic_weather_location.migration), absent on most PCs. When the console's launcher (`shown_by`) showed the
+        migration's place with no record ('showed') and both location sectors are erased, `target` gets its record; when
+        the release reads packs and the console's record (or the one written now) is that place and both pack copies
+        are erased, also its pack. (target, words) or None. Nothing already on the console is ever overwritten."""
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        found = wl.migration(MIGRATION_FILE)
+        if found is None or len(target) != SIZE or not wl.shows_orlando(release.version) or not shown_by:
+            return None
+        place, words = found['place'], []
+        erased = lambda r: span(target, r) == b'\xff' * (r[1] - r[0]) and span(before, r) == span(target, r)
+        on_console, _ = wl.current(span(target, LOCATION_A), span(target, LOCATION_B))
+        if str(shown_by) in found['showed'] and erased(LOCATION):
+            target = wl.with_place(target, place, LOCATION_A, LOCATION_B)
+            on_console = place
+            words.append('its weather location')
+        elif not (str(shown_by) in found['showed_with_record'] and on_console == place):
+            return None
+        if lp.reads_packs(release.version) and found['pack'] is not None and on_console == place and erased(PACK):
+            try:
+                pack = lp.load_file(found['pack'])
+            except lp.PackError:
+                pack = None
+            if pack is not None and pack.binds(place):
+                target = lp.with_pack(target, pack, PACK_A, PACK_B)
+                words.append('its area pages')
+        if not words:
+            return None
+        return target, ' and '.join(words)
+
+    def first_weather_target(self, target, release):
+        """A first install's weather choice (self.first_weather(): ('place', Place, Pack or None), ('default',) or
+        ('skip',); None or no callback: nothing asked, the defaults). (target, words) or None. 'skip' is carried out
+        by the apps record (TV hidden): apps_install_target reads self.first_choice."""
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        ask = getattr(self, 'first_weather', None) or first_weather_pending
+        choice = ask() if callable(ask) else None
+        self.first_choice = choice
+        if not choice or choice[0] == 'default':
+            return None if not choice else (target, 'Local Weather: Orlando, FL, the built-in place (nothing more to write).')
+        if choice[0] == 'skip':
+            return None
+        place, pack = choice[1], choice[2] if len(choice) > 2 else None
+        target = wl.with_place(target, place, LOCATION_A, LOCATION_B)
+        words = 'This first install also writes your weather location'
+        if pack is not None and pack.binds(place):
+            target = lp.with_pack(target, pack, PACK_A, PACK_B)
+            words += ' with its area pages'
+        return target, words + '.'
+
+    def keep_written_weather(self, image):
+        """After an install that wrote a weather location (and pages) on its own (a migration, a first-install choice):
+        this PC keeps them as its saved copies, so a later install puts them back if the console loses them. Only when
+        nothing is saved. Private files; never raises."""
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        try:
+            place, _ = wl.current(span(image, LOCATION_A), span(image, LOCATION_B))
+            pack, _ = lp.current(span(image, PACK_A), span(image, PACK_B))
+            if place is not None and wl.load_saved(LOCATION_FILE) is None:
+                wl.save(place, LOCATION_FILE)
+            if pack is not None and place is not None and pack.binds(place) and lp.load_saved(PACK_FILE) is None:
+                lp.save(pack, PACK_FILE)
+        except Exception:
+            pass
+
+    def weather_location(self, place, pack=None):
+        """Write the Local Weather channel's location (a chromatic_weather_location.Place) to both location sectors and
+        its area pages (`pack`, a chromatic_location_pack.Pack made for that place, or None) to both pack copies, or
+        erase both for the default (place None: the launcher's compiled-in place, Orlando, FL). A new place without a
+        pack erases the old pack (it was another place's). One journalled job like the console setup's: the before
+        image is kept until it is closed, the whole flash is checked on the chip, a cut-off write is finished by Finish
+        job. Nothing else changes. The place is never printed or logged ("your location")."""
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        if place is None:
+            pack = None
+        if pack is not None and not pack.binds(place):
+            self.say('Refused, nothing written: those area pages were made for another place.')
+            return EXIT_REFUSED
+
+        def job():
+            self.open_job_guard()
+            release = self.release_loader()
+            identity, backups = self.unit_identity()
+            self.connect(identity)
+            image = self.identify(release, backups)
+            state = describe(image, release)
+            # The default only ever writes erased bytes to the location and pack areas, so it is allowed on a plain
+            # stock console too (a location left there after an official update can be cleared).
+            if state.name == 'stock' and place is not None:
+                raise Refused('the start-up menu is not on this console. Install it first.')
+            if state.name not in ('installed', 'outdated', 'partial', 'dormant', 'stock'):
+                raise Refused(f'Weather location refused: console state is {state.name}.')
+            a, b = span(image, LOCATION_A), span(image, LOCATION_B)
+            current, _ = wl.current(a, b)
+            if place is not None and current == place and a == b:
+                target = image
+            else:
+                target = wl.with_place(image, place, LOCATION_A, LOCATION_B)
+            pa, pb = span(target, PACK_A), span(target, PACK_B)
+            held, _ = lp.current(pa, pb)
+            if pack is None:
+                if pa != b'\xff' * len(pa) or pb != b'\xff' * len(pb):
+                    target = lp.with_pack(target, None, PACK_A, PACK_B)
+            elif not (held == pack and pa == pb):
+                target = lp.with_pack(target, pack, PACK_A, PACK_B)
+            if target == image:
+                self.close_device()
+                self.say('The console already has this weather location. Nothing written.' if place else
+                         f'The console already uses the default weather location '
+                         f'({wl.default_name(state.launcher_version)}). Nothing written.')
+                return EXIT_OK
+            check_layout_change(image, target, (LOCATION, PACK))
+            result = self.run_job('location', image, target, False, lambda: True, identity)
+            if result == EXIT_OK:
+                self.close_device()
+                self.say(('Weather location written to the launcher area (both copies) and checked on the chip: your '
+                          'location' + (', with its area pages.' if pack is not None else '.')) if place else
+                         'Weather location set back to the default, '
+                         f'{wl.default_name(state.launcher_version)} (both copies erased) and checked on the chip.')
+                if place and not reads_weather_location(state.launcher_version):
+                    self.say(f'The start-up menu on the console ({state.launcher_version or "switched off"}) shows '
+                             'its own built-in place until launcher 1.6.3 or newer is installed; then it shows your '
+                             'location.')
+                if place and pack is not None and not lp.reads_packs(state.launcher_version):
+                    self.say(f'The area pages are shown once start-up menu {".".join(map(str, lp.FIRST_LAUNCHER))} or '
+                             'newer is installed.')
             return result
         return self.guarded(job)
+
+    def console_location(self, image, version=None):
+        """One line about the weather location: whether one is set (and has its area pages), never which (no record:
+        the default of the console's launcher `version`)."""
+        import chromatic_location_pack as lp
+        import chromatic_weather_location as wl
+        place, _ = wl.current(span(image, LOCATION_A), span(image, LOCATION_B))
+        pack, _ = lp.current(span(image, PACK_A), span(image, PACK_B))
+        pages = ' with its area pages' if place is not None and pack is not None and pack.binds(place) else ''
+        return (f'Weather location: your location{pages} (set in Chromatic Manager).' if place else
+                f'Weather location: {wl.default_name(version)} (the default).')
+
+    # ---- the apps record (launcher 1.6.4+) ----------------------------------------------------------------------
+    def apps_install_target(self, before, target, release, shown_by=None):
+        """For an install: (target with the apps record in both copies, flags, 'saved' or 'kept'), or None when nothing
+        is written. Only when the release reads the record and the console holds no valid copy: then the copy saved on
+        this PC, else, on a console whose launcher (1.6.0-1.6.3; `shown_by`, or the one in `before`) showed both rows and
+        TV's server list and whose two apps sectors are erased, exactly that (a damaged record is left as it is, like the
+        weather location: review L5). Otherwise (a new console, an older launcher, a choice already on the console)
+        nothing: the defaults or the console's own choice stay."""
+        import chromatic_apps as ap
+        if len(target) != SIZE or not ap.reads_record(release.version):
+            return None
+        a, b = span(target, APPS_A), span(target, APPS_B)
+        if ap.current(a, b)[0] is not None:
+            return None
+        saved = ap.load_saved(APPS_FILE)
+        erased = a == b'\xff' * len(a) and b == b'\xff' * len(b)
+        first = getattr(self, 'first_choice', None)
+        if erased and first and first[0] == 'skip':  # "skip Local Weather" at a first install: the TV row hidden
+            flags = (saved if saved is not None else ap.DEFAULTS) & ~(ap.TV | ap.LIVETV)
+            return ap.with_apps(target, flags, APPS_A, APPS_B), flags, 'first'
+        if saved is not None:
+            flags, why = saved, 'saved'
+        elif erased and ap.showed_both(shown_by or describe(before, release).launcher_version):
+            flags, why = ap.AS_1_6, 'kept'
+        else:
+            return None
+        return ap.with_apps(target, flags, APPS_A, APPS_B), flags, why
+
+    @staticmethod
+    def keep_console_apps(image):
+        """This PC's saved copy follows the console's record (also a choice made on the console), so a later install
+        can put it back if the console loses it. Local private file only; says nothing. Never raises."""
+        import chromatic_apps as ap
+        try:
+            flags, _ = ap.current(span(image, APPS_A), span(image, APPS_B))
+            if flags is not None and ap.load_saved(APPS_FILE) != flags:
+                ap.save(flags, APPS_FILE)
+        except Exception:
+            pass
+
+    def apps(self, flags):
+        """Write which apps the start-up menu shows (chromatic_apps flags) to both apps sectors, A then B, or erase both
+        for the defaults (flags None: TV with Local Weather only, no ChromaTube). One journalled job like the weather
+        location's: the before image is kept until it is closed, the whole flash is checked on the chip, a cut-off write
+        is finished by Finish job. Nothing else changes; the console reads it when it next starts."""
+        import chromatic_apps as ap
+
+        def job():
+            self.open_job_guard()
+            release = self.release_loader()
+            identity, backups = self.unit_identity()
+            self.connect(identity)
+            image = self.identify(release, backups)
+            state = describe(image, release)
+            # The defaults only ever write erased bytes to the two apps sectors: allowed on a plain stock console too.
+            if state.name == 'stock' and flags is not None:
+                raise Refused('the start-up menu is not on this console. Install it first.')
+            if state.name not in ('installed', 'outdated', 'partial', 'dormant', 'stock'):
+                raise Refused(f'Apps refused: console state is {state.name}.')
+            a, b = span(image, APPS_A), span(image, APPS_B)
+            now, _ = ap.current(a, b)
+            if flags is not None and now == flags and a == b:
+                target = image
+            else:
+                target = ap.with_apps(image, flags, APPS_A, APPS_B)
+            if target == image:
+                self.close_device()
+                self.say('The console already shows these apps. Nothing written.' if flags is not None else
+                         'The console already uses the default apps. Nothing written.')
+                return EXIT_OK
+            check_layout_change(image, target, (APPS,))
+            result = self.run_job('apps', image, target, False, lambda: True, identity)
+            if result == EXIT_OK:
+                self.close_device()
+                shown = ap.DEFAULTS if flags is None else flags
+                self.say('Apps written to the launcher area (both copies) and checked on the chip.' if flags is not None else
+                         'Apps set back to the defaults (both copies erased) and checked on the chip.')
+                self.say(f'Apps on the start-up menu now: {ap.words(shown, flags is not None)}.')
+                if not ap.reads_record(state.launcher_version):
+                    self.say(f'The start-up menu on the console ({state.launcher_version or "switched off"}) shows every app '
+                             'until launcher 1.6.4 or newer is installed; then it follows this choice.')
+            return result
+        return self.guarded(job)
+
+    def console_apps(self, image, state):
+        """One line about the apps record: which rows the menu shows (nothing personal)."""
+        import chromatic_apps as ap
+        flags, _ = ap.current(span(image, APPS_A), span(image, APPS_B))
+        line = f'Apps on the start-up menu: {ap.words(ap.DEFAULTS if flags is None else flags, flags is not None)}.'
+        if state.launcher_version and not ap.reads_record(state.launcher_version):
+            line += (f' (Launcher {state.launcher_version} does not read this; it shows '
+                     + ('TV and ChromaTube.)' if ap.showed_both(state.launcher_version) else 'neither.)'))
+        return line
 
     def _switch(self, kind, plan, done):
         def job():
@@ -1475,6 +1895,7 @@ class Manager:
         """Power-safe switch-off used before an official update: erase the launcher only."""
         def plan(image, release, backups):
             state = describe(image, release)
+            self.switched_off_from = state.launcher_version  # for the guided update's step 4 (review M1)
             if state.name in ('stock', 'partial') and span(image, SLOT_APP) == b'\xff' * (SLOT_APP[1] - SLOT_APP[0]):
                 return None
             if state.name not in ('installed', 'outdated', 'partial', 'dormant'):
@@ -1677,7 +2098,11 @@ class Manager:
                  'even if power is lost). This checks the console first: about 20 seconds when its firmware is '
                  'already backed up, about 6.5 minutes when it must be read in full.')
         self.last_image = None
+        self.switched_off_from = None
         result = self.disable()
+        # Review M1 of 1.6.4: the launcher the console ran before this switch-off decides step 4's install defaults
+        # (a 1.6.0-1.6.3 owner keeps TV with Live TV, ChromaTube and the weather it showed).
+        was_version = self.switched_off_from
         if result != EXIT_OK:
             self.say('Stopped at step 1. Nothing else was done.')
             return result
@@ -1760,7 +2185,7 @@ class Manager:
             self.say(f'Stock firmware updated from {old[1]} to {new[1]}.')
         self.say('Step 4 of 4: switching the start-up menu back on.')
         self.last_boot_log = None
-        result = self.install(current=after)
+        result = self.install(current=after, was_version=was_version)
         if result == EXIT_OK:
             self.say('Done: official update applied and the start-up menu is back on.')
             # ModRetro's updater writes its own console chip (FPGA) image, so a Jellyfin sound image is
@@ -2094,6 +2519,479 @@ def private_prompts(ask):
 REMOTE_PILOT_PAIRING = (Path(os.environ['REMOTE_PILOT_HOME']) if os.environ.get('REMOTE_PILOT_HOME')
                         else ROOT / 'remote-pilot') / 'local/chromatic/pairing.json'
 PROVISION_COPY = PRIVATE / 'chromatic-provision.json'
+# The weather location the owner chose (chromatic_weather_location; Git-ignored; never printed or logged).
+LOCATION_FILE = PRIVATE / 'chromatic-weather-location.json'
+# A choice the window's Weather location page made and the owner approved, waiting for its write. It becomes
+# the saved choice (LOCATION_FILE) only once the console verifiably holds it; it is removed either way.
+LOCATION_PENDING = PRIVATE / 'chromatic-weather-location.pending.json'
+# The area pages (location pack) for the saved weather location (chromatic_location_pack; Git-ignored): written back at
+# an install like the location; a pack the window made and the owner approved waits beside the pending location.
+PACK_FILE = PRIVATE / 'chromatic-weather-pack.pjlp'
+PACK_PENDING = PRIVATE / 'chromatic-weather-pack.pending.pjlp'
+# This PC's private weather migration (chromatic_weather_location.MIGRATION): absent on most PCs.
+MIGRATION_FILE = PRIVATE / 'chromatic-weather-migration.json'
+# The apps choice (chromatic_apps; Git-ignored): the copy this PC writes back at an install if the console lost it,
+# and the window's approved choice waiting for the 'apps' job (removed either way).
+APPS_FILE = PRIVATE / 'chromatic-apps.json'
+APPS_PENDING = PRIVATE / 'chromatic-apps.pending.json'
+
+
+def written_location_saved(result, place, pack=None):
+    """After a weather location write: keep `place` (and its area pages, `pack`) as this PC's saved choice only when
+    the console now holds it (written and checked, or recovered to it, or it was there already)."""
+    import chromatic_location_pack as lp
+    import chromatic_weather_location as wl
+    if result in (EXIT_OK, EXIT_RECOVERED):
+        wl.save(place, LOCATION_FILE)
+        lp.save(pack if place is not None else None, PACK_FILE)
+        return True
+    return False
+
+
+def weather_location_job(manager):
+    """The 'weather' job. With a choice the window's page made (LOCATION_PENDING, and PACK_PENDING when it made the
+    area pages too; approved by the owner), write that and only then save it as this PC's choice. Otherwise write the
+    location (and pages) saved on this PC, or, when none is saved, put the console back to the default (Orlando, FL)."""
+    import chromatic_location_pack as lp
+    import chromatic_weather_location as wl
+    try:
+        data = json.loads(LOCATION_PENDING.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        place = wl.load_saved(LOCATION_FILE)
+        pack = lp.load_saved(PACK_FILE)
+        return manager.weather_location(place, pack if place is not None and pack is not None and pack.binds(place) else None)
+    except (OSError, ValueError):
+        data = None
+    pack, pack_bad = None, False
+    if PACK_PENDING.exists():
+        try:
+            pack = lp.load_file(PACK_PENDING)
+        except lp.PackError:
+            pack_bad = True
+    for path in (LOCATION_PENDING, PACK_PENDING):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    try:
+        place = None if (data or {}).get('default') else wl.Place.from_json(data)
+    except (KeyError, TypeError, ValueError):
+        place = None
+        data = None
+    if data is None or pack_bad:
+        manager.say('Refused, nothing written: the chosen weather location could not be read back on this PC. '
+                    'Choose it again.')
+        return EXIT_REFUSED
+    result = manager.weather_location(place, pack)
+    written_location_saved(result, place, pack)
+    return result
+
+
+def pending_location(place, pack=None):
+    """The window's approved choice, for the 'weather' job (None: the default), with its area pages when made."""
+    import chromatic_location_pack as lp
+    import chromatic_weather_location as wl
+    LOCATION_PENDING.parent.mkdir(parents=True, exist_ok=True)
+    body = {'default': True} if place is None else wl.Place.check(place).to_json()
+    if pack is not None and place is not None and pack.binds(place):
+        lp.save_file(pack, PACK_PENDING)
+    else:
+        try:
+            PACK_PENDING.unlink()
+        except OSError:
+            pass
+    write_durable(LOCATION_PENDING, json.dumps(body).encode('utf-8'))
+
+
+def drop_pending_location():
+    for path in (LOCATION_PENDING, PACK_PENDING):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+# The window's answer to a first install's "Add Local Weather?" (asked before the install's Approve), waiting for the
+# install job; removed when read. Private files.
+FIRST_PENDING = PRIVATE / 'chromatic-first-weather.pending.json'
+FIRST_PACK_PENDING = PRIVATE / 'chromatic-first-weather.pending.pjlp'
+FIRST_PENDING_SECONDS = 600   # an older answer is never used (and is removed); every install removes it too
+
+
+def pending_first_weather(choice):
+    """Keep the window's first-install weather choice for the install job: ('place', Place, Pack or None), ('default',),
+    ('skip',), or None to forget one."""
+    import chromatic_location_pack as lp
+    for path in (FIRST_PENDING, FIRST_PACK_PENDING):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    if not choice:
+        return
+    body = {'choice': choice[0], 'made': time.time()}
+    if choice[0] == 'place':
+        body['place'] = choice[1].check().to_json()
+        if len(choice) > 2 and choice[2] is not None and choice[2].binds(choice[1]):
+            lp.save_file(choice[2], FIRST_PACK_PENDING)
+    FIRST_PENDING.parent.mkdir(parents=True, exist_ok=True)
+    write_durable(FIRST_PENDING, json.dumps(body).encode('utf-8'))
+
+
+def first_weather_pending():
+    """The install job's default first-install question: the window's kept answer, read once, or None (nothing asked:
+    the defaults)."""
+    import chromatic_location_pack as lp
+    import chromatic_weather_location as wl
+    try:
+        body = json.loads(FIRST_PENDING.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    try:  # review L3 of 1.6.5: only an answer given just now (the window starts the install right after it)
+        fresh = 0 <= time.time() - float(body.get('made')) <= FIRST_PENDING_SECONDS
+    except (TypeError, ValueError):
+        fresh = False
+    if not fresh:
+        pending_first_weather(None)
+        return None
+    pack = None
+    try:
+        if body.get('choice') == 'place' and FIRST_PACK_PENDING.exists():
+            pack = lp.load_file(FIRST_PACK_PENDING)
+        choice = ('place', wl.Place.from_json(body['place']), pack) if body.get('choice') == 'place' else \
+            (body.get('choice'),) if body.get('choice') in ('default', 'skip') else None
+    except (KeyError, TypeError, ValueError, lp.PackError):
+        choice = None
+    pending_first_weather(None)
+    return choice
+
+
+def make_pages_menu(place, ask, maker=None):
+    """The text menu's offer to make a place's area pages (needs the internet: api.weather.gov and the NWS map
+    server). The pack, or None."""
+    if ask('Make the area pages for this place too (state map, close-up, radar; about 15 requests to the US weather '
+           'service)? Type yes: ').strip().lower() != 'yes':
+        return None
+    try:
+        if maker is None:
+            import make_location_pack as mk
+            maker = mk.make
+        pack = maker(place)
+    except Exception as error:  # a plain message: the pages are optional
+        print(f'The area pages could not be made ({error}). The place is written without them.')
+        return None
+    import chromatic_location_pack as lp
+    print('\n'.join(lp.describe(pack)))
+    return pack
+
+
+def weather_location_menu(manager, ask=input, maker=None):
+    """The text menu's Weather location: look the place up on this PC, complete it from
+    api.weather.gov, show it to the person (on their own screen only, never in the log), offer its area pages,
+    write it, and save it privately once the console holds it. Empty answer: nothing; "default": Orlando, FL;
+    "import <file>": a location pack file for the saved place; "export <file>": the saved pack as a file."""
+    import chromatic_location_pack as lp
+    import chromatic_weather_location as wl
+    saved = wl.load_saved(LOCATION_FILE)
+    query = ask(f'Weather location now: {"your saved location" if saved else wl.DEFAULT_TEXT}. Type a ZIP code or '
+                '"City, ST" (or "default" for Orlando, FL; "import <file>" / "export <file>" for area pages; empty to '
+                'keep it): ').strip()
+    if not query:
+        print('Nothing done.')
+        return EXIT_OK
+    pack = None
+    if query.lower().startswith('export '):
+        held = lp.load_saved(PACK_FILE)
+        if held is None:
+            manager.say('No area pages are saved on this PC. Nothing written.')
+            return EXIT_REFUSED
+        lp.save_file(held, query[7:].strip().strip('"'))
+        manager.say('Area pages saved as a file (they name your place: share them only if you want to).')
+        return EXIT_OK
+    if query.lower().startswith('import '):
+        try:
+            pack = lp.load_file(query[7:].strip().strip('"'))
+        except lp.PackError as error:
+            manager.say(f'Refused, nothing written: {error}')
+            return EXIT_REFUSED
+        if saved is None or not pack.binds(saved):
+            manager.say('Refused, nothing written: that pack was made for another place than your saved location.')
+            return EXIT_REFUSED
+        place = saved
+    elif query.lower() == 'default':
+        place = None
+    else:
+        found = wl.find(query)
+        if not found:
+            manager.say('No US place matched. Try a ZIP code or "City, ST". Nothing written.')
+            return EXIT_REFUSED
+        more = wl.more_hint(query, len(found))
+        pick = ask('Which one?\n' + '\n'.join(f'  {n}. {f.name}' for n, f in enumerate(found, 1))
+                   + (f'\n  ({more})' if more else '') + '\nNumber: ').strip()
+        if not pick.isdigit() or not 1 <= int(pick) <= len(found):
+            print('Nothing done.')
+            return EXIT_OK
+        try:
+            place = wl.resolve(found[int(pick) - 1])
+        except wl.LocationError as error:
+            manager.say(f'Refused, nothing written: {error}')
+            return EXIT_REFUSED
+        if ask('\n'.join(wl.describe(place)) + '\nUse this place? Type yes: ').strip().lower() != 'yes':
+            print('Nothing done.')
+            return EXIT_OK
+        pack = make_pages_menu(place, ask, maker)
+    if not person_confirms(ask, 'Write the weather location to the console'):
+        print('Nothing done.')
+        return EXIT_OK
+    result = manager.weather_location(place, pack)
+    if written_location_saved(result, place, pack):  # saved on this PC only once the console holds it
+        manager.say('Weather location saved on this PC (private file).' if place else
+                    'Weather location on this PC: the default, Orlando, FL (launcher 1.6.4+).')
+    return result
+
+
+def first_weather_menu(ask=input, maker=None, finder=None, resolver=None):
+    """The text menu's first-install question, asked before the install's typed confirmation (and so before the
+    console is opened): ('place', Place, Pack or None), ('default',) or ('skip',). Nothing is written here; the install
+    writes it, said before its writes, only when it is a first install."""
+    import chromatic_weather_location as wl
+    answer = ask('Add Local Weather? Type a US ZIP code or "City, ST" to choose your location, "default" for Orlando, '
+                 'FL, or "skip" (the TV row is hidden; turn it on later in Apps): ').strip()
+    if answer.lower() == 'skip':
+        return ('skip',)
+    if not answer or answer.lower() == 'default':
+        return ('default',)
+    found = (finder or wl.find)(answer)
+    if not found:
+        print('No US place matched: the default, Orlando, FL. Choose your location later in Weather location.')
+        return ('default',)
+    try:
+        place = (resolver or wl.resolve)(found[0])
+    except wl.LocationError as error:
+        print(f'{error} The default, Orlando, FL. Choose your location later in Weather location.')
+        return ('default',)
+    print('\n'.join(wl.describe(place)))
+    return ('place', place, make_pages_menu(place, ask, maker))
+
+
+def written_apps_saved(result, flags):
+    """After an apps write: keep `flags` as this PC's copy only once the console holds it (None: forget the copy)."""
+    import chromatic_apps as ap
+    if result in (EXIT_OK, EXIT_RECOVERED):
+        ap.save(flags, APPS_FILE)
+        return True
+    return False
+
+
+def apps_job(manager):
+    """The 'apps' job. With the window's approved choice (APPS_PENDING) write that, then save it on this PC; otherwise
+    write the copy saved on this PC. With neither (for example a program's request before any choice was made) nothing
+    is written: never the defaults by surprise, which would hide an app the owner uses."""
+    import chromatic_apps as ap
+    try:
+        data = json.loads(APPS_PENDING.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        saved = ap.load_saved(APPS_FILE)
+        if saved is None:
+            manager.say('Refused, nothing written: no apps choice is saved on this PC. Choose one in Settings > Apps.')
+            return EXIT_REFUSED
+        return manager.apps(saved)
+    except (OSError, ValueError):
+        data = None
+    try:
+        APPS_PENDING.unlink()
+    except OSError:
+        pass
+    try:
+        flags = None if (data or {}).get('default') else int(data['flags'])
+        if flags is not None:
+            ap.Apps.from_flags(flags)
+    except (KeyError, TypeError, ValueError):
+        manager.say('Refused, nothing written: the chosen apps could not be read back on this PC. Choose them again.')
+        return EXIT_REFUSED
+    result = manager.apps(flags)
+    written_apps_saved(result, flags)
+    return result
+
+
+def pending_apps(flags):
+    """The window's approved choice, for the 'apps' job (None: the defaults)."""
+    import chromatic_apps as ap
+    APPS_PENDING.parent.mkdir(parents=True, exist_ok=True)
+    body = {'default': True} if flags is None else {'flags': ap.Apps.from_flags(flags).flags}
+    write_durable(APPS_PENDING, json.dumps(body).encode('utf-8'))
+
+
+def drop_pending_apps():
+    try:
+        APPS_PENDING.unlink()
+    except OSError:
+        pass
+
+
+def apps_menu(manager, ask=input):
+    """The text menu's Apps: TV on or off (and whether it lists the server's Live TV channels), ChromaTube on or off."""
+    import chromatic_apps as ap
+    saved = ap.load_saved(APPS_FILE)
+    now = ap.words(ap.DEFAULTS if saved is None else saved, saved is not None)
+    answer = ask(f'Apps saved on this PC: {now}.\n'
+                 '  1. TV with Local Weather only (no server needed), ChromaTube off   (the defaults)\n'
+                 '  2. TV with Local Weather and your server\'s Live TV channels, ChromaTube off\n'
+                 '  3. TV with Local Weather and Live TV channels, ChromaTube on\n'
+                 '  4. TV with Local Weather only, ChromaTube on\n'
+                 '  5. TV off, ChromaTube on\n'
+                 '  6. TV off, ChromaTube off\n'
+                 'Number (empty: nothing): ').strip()
+    choices = {'1': ap.TV, '2': ap.TV | ap.LIVETV, '3': ap.KNOWN, '4': ap.TV | ap.TUBE, '5': ap.TUBE, '6': 0}
+    if answer not in choices:
+        print('Nothing done.')
+        return EXIT_OK
+    flags = choices[answer]
+    if not person_confirms(ask, f'Write to the console: {ap.words(flags)}'):
+        print('Nothing done.')
+        return EXIT_OK
+    result = manager.apps(flags)
+    if written_apps_saved(result, flags):
+        manager.say('Apps choice saved on this PC.')
+    return result
+
+
+def server_session_menu(manager, ask, secret):
+    """An administrator session for one server job (chromatic_server_apps): the PC's saved sign-in only when the person
+    agrees for this job (and it is an administrator), else one typed now (memory only). None when refused."""
+    import chromatic_server_apps as sa
+    session = None
+    if jellyfin_settings_available() and ask('Use the Jellyfin sign-in saved on this PC for this one job (it must be an '
+                                             'administrator)? Type yes, or no to type another: ').strip().lower() == 'yes':
+        session, why = sa.saved_session()
+        if session is None:
+            manager.say(f'Refused: {why}')
+    if session is None:
+        url = ask('Jellyfin server address (http://...:8096): ').strip()
+        user = ask('Administrator user name: ').strip()
+        try:
+            session = sa.typed_session(url, user, secret('Password (hidden; kept in memory for this job only): '))
+        except sa.SetupError as error:
+            manager.say(f'Refused, nothing changed: {error}')
+            return None
+    if not session.admin:
+        session.close()
+        manager.say('Refused, nothing changed: that sign-in is not a Jellyfin administrator.')
+        return None
+    return session
+
+
+def livetv_menu(manager, ask=input, secret=None):
+    """The text menu's optional Live TV channels (Add or Remove), on the Jellyfin server only (never the console)."""
+    import getpass
+    import chromatic_server_apps as sa
+    secret = secret or getpass.getpass
+    what = ask('Live TV channels for the TV app (optional; your Jellyfin server only). Type add, remove, or nothing: ')
+    what = what.strip().lower()
+    if what not in ('add', 'remove'):
+        print('Nothing done.')
+        return EXIT_OK
+    session = server_session_menu(manager, ask, secret)
+    if session is None:
+        return EXIT_REFUSED
+    try:
+        if what == 'remove':
+            if not person_confirms(ask, 'Remove the Chromatic TV tuner from your Jellyfin server'):
+                print('Nothing done.')
+                return EXIT_OK
+            return EXIT_OK if sa.livetv_remove(session, manager.say) else EXIT_REFUSED
+        keys = [g.key for g in sa.GROUPS]
+        picked = ask('Groups (numbers, for example 1,2): ' + ', '.join(f'{n}. {g.label}' for n, g in enumerate(sa.GROUPS, 1))
+                     + ' (empty: all four): ').strip()
+        if picked:
+            try:
+                keys = [sa.GROUPS[int(p) - 1].key for p in re.split(r'[\s,]+', picked) if p]
+            except (ValueError, IndexError):
+                print('Nothing done.')
+                return EXIT_OK
+        base = ask('Folder on this PC that holds your Jellyfin library folders (a network share, for example \\\\server\\media or D:\\Media): ')
+        try:
+            plan = sa.livetv_plan(session, keys, Path(base.strip().strip('"')))
+        except sa.SetupError as error:
+            manager.say(f'Refused, nothing changed: {error}')
+            return EXIT_REFUSED
+        print(plan.text())
+        if not plan.ready or not person_confirms(ask, 'Add these Live TV channels to your Jellyfin server'):
+            print('Nothing done.')
+            return EXIT_OK
+        return EXIT_OK if sa.livetv_add(session, plan, manager.say) else EXIT_REFUSED
+    finally:
+        session.close()
+
+
+def chromatube_menu(manager, ask=input, secret=None):
+    """The text menu's optional ChromaTube: the files for the person's own Docker host, a check that the tool answers,
+    and the ChromaTube library (Add or Remove) on the Jellyfin server."""
+    import getpass
+    import chromatic_server_apps as sa
+    secret = secret or getpass.getpass
+    print(sa.TERMS)
+    what = ask('Type files (write the Docker files), check (the tool answers), add or remove (the library), or nothing: ')
+    what = what.strip().lower()
+    if what == 'files':
+        folder = Path(ask('Folder on this PC to save the five files in: ').strip().strip('"'))
+        host = ask('The Docker machine\'s home-network address (for example 192.168.1.20): ').strip()
+        media = ask('Media folder on the Docker machine (one Jellyfin already sees, not inside a library): ').strip()
+        settings = ask('Settings folder on the Docker machine (where these files will go): ').strip()
+        channels = []
+        print('YouTube channels, one a line (https://www.youtube.com/@name); an empty line ends:')
+        while True:
+            line = ask('> ').strip()
+            if not line:
+                break
+            channels.append(line)
+        try:
+            sa.save_server_files(folder, host, media, settings, channels)
+        except ValueError as error:
+            manager.say(f'Nothing written: {error}')
+            return EXIT_REFUSED
+        except OSError:
+            manager.say('The files could not be written there.')
+            return EXIT_REFUSED
+        print('Saved the five files. ' + sa.SIGNIN_WHERE)
+        print('\n'.join(sa.STEPS))
+        return EXIT_OK
+    if what == 'check':
+        host = ask('The Docker machine\'s home-network address: ').strip()
+        result = sa.tool_check(host)
+        manager.say('ChromaTube tool check: ' + ('yes, with its sign-in' if result == 'ok' else 'no'))
+        print(sa.CHECK_WORDS.get(result, sa.CHECK_WORDS['down']))
+        return EXIT_OK
+    if what not in ('add', 'remove'):
+        print('Nothing done.')
+        return EXIT_OK
+    session = server_session_menu(manager, ask, secret)
+    if session is None:
+        return EXIT_REFUSED
+    try:
+        if what == 'remove':
+            unrecorded = sa.chromatube_unrecorded(session)  # review L1: no record on this PC: only a ChromaTube-like one
+            if unrecorded is False:
+                manager.say('Refused, nothing changed: this PC has no record of adding the ChromaTube library, and its '
+                            'folder does not look like a ChromaTube folder. Remove it in Jellyfin\'s Dashboard if it is yours.')
+                return EXIT_REFUSED
+            if unrecorded:
+                print('This PC has no record of adding it. The library named ChromaTube has one folder named ChromaTube '
+                      'with channel folders in it.')
+            if not person_confirms(ask, 'Remove the ChromaTube library from your Jellyfin server (its files stay)'):
+                print('Nothing done.')
+                return EXIT_OK
+            return EXIT_OK if sa.chromatube_remove(session, manager.say, unrecorded_ok=bool(unrecorded)) else EXIT_REFUSED
+        found = sa.find_chromatube_folders(session)
+        path = found[0] if len(found) == 1 else ask('The ChromaTube folder as your Jellyfin server sees it: ').strip()
+        problems, text = sa.chromatube_plan(session, path)
+        print(text)
+        if problems or not person_confirms(ask, 'Add the ChromaTube library to your Jellyfin server'):
+            print('Nothing done.')
+            return EXIT_OK
+        return EXIT_OK if sa.chromatube_add(session, path, manager.say) else EXIT_REFUSED
+    finally:
+        session.close()
 
 
 def lan_ipv4():
@@ -2347,6 +3245,14 @@ def menu(manager, ask=input):
                      lambda: jellyfin_relink(manager), True),
                '9': ('Forget Jellyfin on the console (and log its sign-in out)',
                      lambda: jellyfin_forget(manager), True),
+               'w': ('Weather location for the Local Weather channel (default Orlando, FL; launcher 1.6.3+)',
+                     lambda: weather_location_menu(manager, ask), False),
+               'a': ('Apps on the start-up menu: TV (Local Weather, Live TV) and ChromaTube on or off (launcher 1.6.4+)',
+                     lambda: apps_menu(manager, ask), False),
+               'l': ('Live TV channels for TV, optional (add or remove on your Jellyfin server; the console is not touched)',
+                     lambda: livetv_menu(manager, ask), False),
+               'y': ('ChromaTube, optional (Docker files for your server, then add or remove its Jellyfin library)',
+                     lambda: chromatube_menu(manager, ask), False),
                'c': ('Console chip (FPGA): check what its flash holds (reads, restarts the console)',
                      lambda: _fpga_menu_job(manager, lambda f: f.check()), True),
                'r': ('Console chip (FPGA): write the original image back (rehearsal / undo), verify, restart',
@@ -2364,6 +3270,24 @@ def menu(manager, ask=input):
     if pick not in choices:
         return EXIT_OK
     label, action, writes = choices[pick]
+    if pick == '3':
+        # Review L2 of 1.6.5: as in the window, "Add Local Weather?" comes first (looked up and its pages made while
+        # nothing is connected), then the typed confirmation, then the job, which uses this answer only on a first
+        # install. A PC with a saved place is not asked (the install writes that place).
+        import chromatic_weather_location as wl
+        answer = None
+        if wl.load_saved(LOCATION_FILE) is None:
+            print('If this console does not have the start-up menu yet, this first install can add Local Weather.')
+            try:
+                answer = first_weather_menu(ask)
+            except (EOFError, KeyboardInterrupt):
+                print('Nothing done.')
+                return EXIT_OK
+        if not person_confirms(ask, label):
+            print('Nothing done.')
+            return EXIT_OK
+        manager.first_weather = lambda: answer
+        return manager.install()
     if writes and not person_confirms(ask, label):
         print('Nothing done.')
         return EXIT_OK

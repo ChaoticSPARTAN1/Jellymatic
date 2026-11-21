@@ -28,6 +28,28 @@ _wifi_gateway.IDENTITY.mkdir()
 (_wifi_gateway.IDENTITY / 'server.der').write_bytes(b'synthetic test certificate')
 (_wifi_gateway.IDENTITY / 'pairing.bin').write_bytes(bytes(32))
 cm.PROVISION_COPY = Path(_SANDBOX.name) / 'provision-copy.json'
+cm.LOCATION_FILE = Path(_SANDBOX.name) / 'no-weather-location.json'  # never the owner's saved weather location
+cm.LOCATION_PENDING = Path(_SANDBOX.name) / 'no-weather-location.pending.json'
+cm.APPS_FILE = Path(_SANDBOX.name) / 'no-apps.json'  # never this PC's saved apps choice (launcher 1.6.4+)
+cm.APPS_PENDING = Path(_SANDBOX.name) / 'no-apps.pending.json'
+# 1.6.5: the saved area pages, this PC's private weather migration and the first-install answer: sandbox only
+cm.PACK_FILE = Path(_SANDBOX.name) / 'no-weather-pack.pjlp'
+cm.PACK_PENDING = Path(_SANDBOX.name) / 'no-weather-pack.pending.pjlp'
+cm.MIGRATION_FILE = Path(_SANDBOX.name) / 'no-weather-migration.json'
+cm.FIRST_PENDING = Path(_SANDBOX.name) / 'no-first-weather.pending.json'
+cm.FIRST_PACK_PENDING = Path(_SANDBOX.name) / 'no-first-weather.pending.pjlp'
+import chromatic_location_pack as _lp  # noqa: E402
+_lp.SAVED = cm.PACK_FILE
+import chromatic_weather_location as _wl  # noqa: E402
+_wl.MIGRATION = cm.MIGRATION_FILE
+_wl.SAVED = cm.LOCATION_FILE
+# The optional server setups: their records and backups in the sandbox, and never this PC's saved Jellyfin sign-in.
+import chromatic_server_apps as _server_apps  # noqa: E402
+_server_apps.BACKUPS = Path(_SANDBOX.name) / 'livetv-backups'
+_server_apps.LIVETV_STATE = _server_apps.BACKUPS / 'state.json'
+_server_apps.CHROMATUBE_STATE = _server_apps.BACKUPS / 'chromatube-library.json'
+_server_apps.CHROMATUBE_SIGNIN = Path(_SANDBOX.name) / 'chromatube-server-signin.json'
+_server_apps.saved_session = lambda opener=None: (None, 'This PC has no saved Jellyfin settings (test sandbox).')
 cm.REMOTE_PILOT_PAIRING = Path(_SANDBOX.name) / 'remote-pilot-pairing.json'
 cm.lan_ipv4 = lambda: '192.0.2.20'
 _REAL_PINNED = cm.PINNED

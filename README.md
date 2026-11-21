@@ -30,14 +30,16 @@
 
 | Part | What it does |
 |---|---|
-| **Start-up menu** (ESP32 "launcher") | Shows **Games**, **Jellyfin** and **Other firmware** when you switch the console on. Games is always there and starts the console's own, untouched firmware. |
+| **Start-up menu** (ESP32 "launcher") | Shows **Games**, **Jellyfin**, **TV**, **ChromaTube** and **Other firmware** when you switch the console on (TV is shown unless you hide it; ChromaTube is off until you switch it on). Games is always there, always first, and starts the console's own, untouched firmware. |
 | **Jellyfin app** | Browse your Jellyfin library and play video with sound on the Chromatic, over Wi-Fi. Wi-Fi and the Jellyfin sign-in are set up on the console itself. |
+| **TV** ([Chromavision](https://github.com/ChaoticSPARTAN1/Chromavision)) | A retro **Local Weather** channel drawn on the console from US weather data (no server needed; it shows Orlando, FL until you choose your place), and optional **live channels** through your Jellyfin server's Live TV. |
+| **ChromaTube** ([ChromaTube](https://github.com/ChaoticSPARTAN1/ChromaTube)) | Optional and unofficial (not affiliated with YouTube or Google): the newest videos of channels you choose, through a small third-party server tool and one Jellyfin library. |
 | **Pocket link** | An updated console chip (FPGA) image, 18.41, that lets the Chromatic feed an Analogue Pocket over a link cable. The Pocket side is [PocketFin](https://github.com/ChaoticSPARTAN1/PocketFin). |
 | **Chromatic Manager** | A Windows program (window, text menu, local API and MCP server) that installs, updates, checks, backs up and removes all of the above, one Approve at a time. |
 | **Remote Pilot** (bundled) | See and press the console's menus from your PC, in your browser or in the Manager's own tab. The full tool is [RemotePilot](https://github.com/ChaoticSPARTAN1/RemotePilot). |
 
 <p align="center">
-  <img src="docs/images/startup-menu.png" width="320" alt="The start-up menu: Games, Jellyfin, Other firmware">
+  <img src="docs/images/startup-menu-apps.png" width="320" alt="The start-up menu: Games, Jellyfin, TV, ChromaTube, Other firmware">
   <img src="docs/images/player-details.png" width="320" alt="The Jellyfin app on the console (sample data)">
   <img src="docs/images/pocket-link.png" width="320" alt="The Pocket link screen">
 </p>
@@ -46,6 +48,31 @@
 </p>
 
 *All pictures are drawn by the project's own preview renderers with made-up sample data.*
+
+<p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
+<img src="docs/images/readme/section-apps.png" width="100%" alt=""></p>
+
+## Apps on the menu: TV and ChromaTube
+
+From start-up menu 1.6 the console has two more apps, each with its own row, its own guide and its own repository,
+built into the same start-up menu (one image to install, check and undo):
+
+- **TV** ([Chromavision](https://github.com/ChaoticSPARTAN1/Chromavision)): opens straight to the **Local Weather**
+  channel, which needs only Wi-Fi; it shows Orlando, FL until you choose your US place in Chromatic Manager
+  (**Settings › Weather location**). Live channels are optional: one tuner on your Jellyfin server's Live TV, added
+  safely with **Settings › Live TV channels** or Chromavision's PC tools.
+- **ChromaTube** ([ChromaTube](https://github.com/ChaoticSPARTAN1/ChromaTube)): optional, off until you switch it on,
+  and unofficial (not affiliated with YouTube or Google). Its server tool conflicts with YouTube's Terms of Service, so
+  setting it up is your own choice: read its "Before you start" first.
+
+Choose the rows in Chromatic Manager (**Settings › Apps**) or on the console (**Select** on a row hides it; **Other
+firmware › Show hidden apps** brings it back): [Apps on the start-up menu](docs/Apps-on-the-start-up-menu.md).
+
+<p align="center">
+  <img src="docs/images/weather-current.png" width="320" alt="Local Weather: current conditions (sample data)">
+  <img src="docs/images/tv-channel-list.png" width="320" alt="The TV channel list (sample names)">
+  <img src="docs/images/chromatube-details.png" width="320" alt="ChromaTube: a video's page (sample data)">
+</p>
 
 <p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
 <img src="docs/images/readme/section-remote-pilot.png" width="100%" alt=""></p>
@@ -94,6 +121,8 @@ Jellyfin. Full documentation: [RemotePilot](https://github.com/ChaoticSPARTAN1/R
    Wi-Fi and sign in to Jellyfin with **Quick Connect**
    ([First run on the console](docs/First-run-on-the-console.md)).
 7. **Play**: choose a film or episode and press A ([Using Jellyfin](docs/Using-Jellyfin-on-the-Chromatic.md)).
+8. **Optional**: choose **TV** for Local Weather (set your place in the Manager's **Settings › Weather location**), and
+   set up live channels or ChromaTube if you want them ([Apps on the start-up menu](docs/Apps-on-the-start-up-menu.md)).
 
 Something went wrong? [Recovery](docs/Recovery.md) explains what the Manager does by itself, and how to put
 everything back, including with ModRetro's **official** update tool.
@@ -104,8 +133,9 @@ everything back, including with ModRetro's **official** update tool.
 ## Documentation (wiki)
 
 Start at **[docs/Home.md](docs/Home.md)**. Pages: What you need · Before you start · Install with Chromatic
-Manager · First run on the console · Using Jellyfin on the Chromatic · Hosting Jellyfin · Pocket link ·
-Remote Pilot · Recovery · FAQ · Building from source · AI prompt examples · Credits & licences.
+Manager · First run on the console · Using Jellyfin on the Chromatic · Apps on the start-up menu · TV and Local
+Weather · ChromaTube · Hosting Jellyfin · Pocket link · Remote Pilot · Recovery · FAQ · Building from source · AI
+prompt examples · Credits & licences.
 
 **As one PDF:** [docs/Jellymatic-Guide.pdf](docs/Jellymatic-Guide.pdf) holds every page, with a clickable table
 of contents; GitHub shows it right in the browser.
@@ -122,7 +152,8 @@ Markdown pages by `scripts/build_docs_html.py` (the PDF by `scripts/build_docs_p
 
 ```
 chromatic/launcher/     start-up menu (ESP-IDF 5.3 app, custom bootloader, host tests)
-chromatic/jellyfin/     the console's Jellyfin app (shared C, host-tested)
+chromatic/jellyfin/     the console's Jellyfin app, with its TV and ChromaTube modes (shared C, host-tested)
+chromatic/weather/      the Local Weather channel: pages, data reader, radar decoder, sound, location record
 chromatic/fpga-media/   console chip (FPGA) sound hooks, Verilog + test benches
 rtl/                    Pocket link bridge and link-port RTL + test benches
 fpga/images/            the exact sources and build receipts of the reviewed FPGA images 18.40 and 18.41
@@ -149,6 +180,8 @@ created on first run and never part of Git.
 
 - [PocketFin](https://github.com/ChaoticSPARTAN1/PocketFin): Jellyfin on the Analogue Pocket (the Pocket side of the Pocket link).
 - [Jellymatic](https://github.com/ChaoticSPARTAN1/Jellymatic): this project.
+- [Chromavision](https://github.com/ChaoticSPARTAN1/Chromavision): the TV row (Local Weather, optional Live TV): its guide and server tools.
+- [ChromaTube](https://github.com/ChaoticSPARTAN1/ChromaTube): the optional ChromaTube row: its guide and server set-up.
 - [RemotePilot](https://github.com/ChaoticSPARTAN1/RemotePilot): Remote Pilot, the full PC remote-control tool.
 
 <p><img src="docs/images/readme/divider.png" width="100%" alt=""><br>
@@ -182,4 +215,6 @@ Created by **ChaoticSPARTAN1**. Built on ModRetro's open-source Chromatic FPGA s
 Espressif ESP-IDF (Apache-2.0), the MiSTer core ("Gameboy_MiSTer"), and the Jellyfin logo (CC BY-SA 4.0, the
 Jellyfin contributors). Small parts come from **Shiny Relay** by Shiny Gen (GPL-3.0): its `uart_tx_busy` fix in the
 18.41 image and the request-once status channel pattern of the Pocket link bridge. Thanks also to the authors of
-ChromatiX, whose open documentation was read as a reference. Full list: [Credits & licences](docs/Credits-and-licences.md).
+ChromatiX, whose open documentation was read as a reference. Local Weather uses US National Weather Service data and
+the US Census Bureau Gazetteer (both public domain); its announcer lines were made with Piper and its public-domain
+"Norman" voice. Full list: [Credits & licences](docs/Credits-and-licences.md).

@@ -167,8 +167,8 @@ static inline void jf_hero(const jf_app *a,uint16_t *fb,const char *id,uint8_t k
 }
 /* pj_ui_header: the Jellyfin mark top left, the source on the right. */
 static inline void jf_header(const jf_app *a,uint16_t *fb) {
-    pj_icon_jellyfin(fb,4,3,0);
-    const char *label=a->offline?"Offline":a->cfg.server_name;
+    if(a->cfg.mode==JF_MODE_TUBE)pj_icon_tube(fb,4,3);else pj_icon_jellyfin(fb,4,3,0);
+    const char *label=a->offline?"Offline":a->cfg.mode==JF_MODE_TUBE?JF_TUBE_LIBRARY:a->cfg.server_name;
     int w=jf_measure(a,label);
     jf_shadow(a,fb,JF_W-5-w,3,w+1,label,a->offline?0xff8a65u:JF_MUTED);
 }
@@ -212,12 +212,19 @@ static inline void jf_draw_home(const jf_app *a,uint16_t *fb) {
 }
 static inline void jf_draw_folder(const jf_app *a,uint16_t *fb) {
     pj_osd_fill(fb,JF_PAGE);
-    pj_icon_jellyfin(fb,4,3,0);
+    if(a->cfg.mode==JF_MODE_TUBE)pj_icon_tube(fb,4,3);else pj_icon_jellyfin(fb,4,3,0);
     jf_text_fit(a,fb,20,3,134,a->folder_title,JF_INK);
     const jf_page *p=&a->folder;
     if(!p->count) {
+        int loading=a->request==JF_R_FOLDER||a->want==JF_W_FOLDER;
+        if(a->cfg.mode==JF_MODE_TUBE&&!a->depth&&!loading&&a->busy!=JF_R_FOLDER) { /* 1.6.4: the library is there, empty */
+            jf_paragraph(a,fb,12,52,136,1,JF_MSG_TUBE_EMPTY,JF_INK);
+            jf_paragraph(a,fb,12,70,136,5,JF_MSG_TUBE_EMPTY_STEP,JF_MUTED);
+            jf_text(a,fb,80-jf_measure(a,"B: back")/2,126,"B: back",0x808080u);
+            return;
+        }
         const char *m=a->busy==JF_R_FOLDER?"Can't reach the server. Trying again...":
-                      a->request==JF_R_FOLDER||a->want==JF_W_FOLDER?"Loading...":"This folder is empty";
+                      loading?"Loading...":"This folder is empty";
         jf_text_fit(a,fb,8,66,JF_W-16,m,JF_INK);return;
     }
     jf_grid g=jf_grid_of(a,p->shape);
@@ -260,10 +267,10 @@ static inline void jf_draw_details(const jf_app *a,uint16_t *fb) {
     if(a->genres[0])jf_shadow(a,fb,x,41,width,a->genres,JF_MUTED);
     uint32_t position=d->resume_s;
     if(jf_playable(d)) {
-        if(position>30&&!d->played){jf_button(a,fb,x,53,52,"Resume",a->detail_action==0);jf_button(a,fb,x+56,53,55,"From start",a->detail_action==1);}
+        if(jf_detail_actions(a)==2u){jf_button(a,fb,x,53,52,"Resume",a->detail_action==0);jf_button(a,fb,x+56,53,55,"From start",a->detail_action==1);}
         else jf_button(a,fb,x,53,52,"Play",1);
     }
-    if(d->runtime_s&&position&&!d->played) {
+    if(d->runtime_s&&position&&!d->played&&a->cfg.mode!=JF_MODE_TUBE) {
         char now[12],total[12],line[28];jf_clock(now,sizeof(now),position);jf_clock(total,sizeof(total),d->runtime_s);
         snprintf(line,sizeof(line),"%s / %s",now,total);
         int fill=(int)((uint64_t)width*position/d->runtime_s);if(fill>width)fill=width;
@@ -303,7 +310,14 @@ static inline void jf_draw_player(const jf_app *a,uint16_t *fb) {
 /* Connecting and errors: the Pocket's source screen look (banner, plain lines). */
 static inline void jf_draw_center(const jf_app *a,uint16_t *fb,const char *line1,const char *line2,const char *hint) {
     pj_osd_fill(fb,JF_PAGE);
-    pj_osd_image(fb,24,16,PJ_BRAND_JFBANNER_W,PJ_BRAND_JFBANNER_H,pj_brand_jfbanner_rgb,pj_brand_jfbanner_alpha);
+    if(a->cfg.mode==JF_MODE_JELLYFIN)pj_osd_image(fb,24,16,PJ_BRAND_JFBANNER_W,PJ_BRAND_JFBANNER_H,pj_brand_jfbanner_rgb,pj_brand_jfbanner_alpha);
+    else { /* 1.6.0: TV's and ChromaTube's own pages carry their own icon and name, not the Jellyfin banner */
+        const char *name=a->cfg.mode==JF_MODE_TV?"TV":JF_TUBE_LIBRARY;
+        int w=jf_measure(a,name),x=80-(w+18)/2;
+        if(a->cfg.mode==JF_MODE_TV)pj_icon_tv(fb,x,26);else pj_icon_tube(fb,x,26);
+        jf_text(a,fb,x+18,27,name,JF_INK);
+        for(int i=0;i<80;i++)pj_osd_rect(fb,40+i,46,1,2,pj_osd_mix(a->cfg.mode==JF_MODE_TV?PJ_UI_TV:PJ_UI_TUBE,0x101010u,(unsigned)(255-i*2)));
+    }
     if(line1)jf_paragraph(a,fb,12,62,136,2,line1,JF_INK);
     if(line2)jf_paragraph(a,fb,12,88,136,2,line2,JF_MUTED);
     if(hint){int w=jf_measure(a,hint);jf_text(a,fb,80-w/2,126,hint,0x808080u);}
@@ -406,7 +420,7 @@ static inline void jf_draw_menu(const jf_app *a,uint16_t *fb) {
         pj_osd_text(fb,8,132,"B: back",PJ_UI_MUTED,alpha,advance);
         return;
     }
-    pj_osd_text(fb,24,4,"Jellyfin",PJ_UI_JELLYFIN,alpha,advance);
+    pj_osd_text(fb,24,4,a->cfg.mode==JF_MODE_TUBE?JF_TUBE_LIBRARY:"Jellyfin",PJ_UI_JELLYFIN,alpha,advance);
     const char *const notes[JF_M_COUNT]={"Your Jellyfin Home","Not saved: resets on exit",
         a->menu_from==JF_S_PLAYER?"Changes the video now":"English by default","Quality and last video",
         "Change network or sign-in","Share with an Analogue Pocket","About this player","Games and other choices",
@@ -428,6 +442,73 @@ static inline void jf_draw_menu(const jf_app *a,uint16_t *fb) {
     int adj=a->menu_sel==JF_M_LAYOUT||a->menu_sel==JF_M_AUDIO||a->menu_sel==JF_M_SUBS;
     pj_osd_text(fb,8,133,adj?"A: change   B: close":"A: choose   B: close",PJ_UI_MUTED,alpha,advance);
 }
+/* ---------- 1.6.0: the TV app ---------- */
+/* Number and name of the focused row (the channel that is on, or the one Up/Down is stepping to). */
+static inline void jf_tv_label(const jf_app *a,const char **number,const char **name) {
+    unsigned extra=jf_tv_extra(a);
+    *number="";*name="";
+    if(a->folder.focus<extra){*number=JF_TV_WX_NUMBER;*name=JF_TV_WX_NAME;}
+    else if(a->folder.focus-extra<a->folder.count){*number=a->folder.items[a->folder.focus-extra].sub;*name=a->folder.items[a->folder.focus-extra].name;}
+    else if(a->tv_state!=JF_TV_SURF){*number=a->detail.sub;*name=a->detail.name;}
+}
+static inline void jf_draw_channels(const jf_app *a,uint16_t *fb) {
+    pj_osd_fill(fb,JF_PAGE);
+    pj_icon_tv(fb,4,3);jf_text(a,fb,20,3,"TV",JF_INK);
+    unsigned extra=jf_tv_extra(a),rows=jf_tv_rows(a);
+    if(a->folder_total&&!a->tv_list_err) { /* channels are counted without the built-in one */
+        char where[24];
+        if(a->folder.focus<extra)snprintf(where,sizeof(where),"%u channels",(unsigned)a->folder_total);
+        else snprintf(where,sizeof(where),"%u of %u",(unsigned)(a->folder_start+a->folder.focus-extra+1u),(unsigned)a->folder_total);
+        jf_text(a,fb,JF_W-5-jf_measure(a,where),3,where,0x808080u);
+    }
+    for(unsigned i=0;i<rows&&i<JF_TV_PAGE+1u;i++) {
+        int y=18+(int)i*14,focused=i==a->folder.focus;
+        const char *number=i<extra?JF_TV_WX_NUMBER:a->tv_list_err?"":a->folder.items[i-extra].sub;
+        const char *name=i<extra?JF_TV_WX_NAME:a->tv_list_err?"Try again":a->folder.items[i-extra].name;
+        if(focused){pj_osd_rect(fb,2,y,156,13,PJ_UI_TV);pj_osd_rect(fb,3,y+1,154,11,pj_osd_mix(PJ_UI_TV,0x101016u,56u));}
+        jf_text_fit(a,fb,6,y+1,28,number,focused?PJ_UI_TV:JF_MUTED);
+        jf_text_fit(a,fb,37,y+1,117,name,focused?JF_INK:0xd0d0d0u);
+    }
+    int y=18+(int)rows*14+4;
+    if(a->tv_list_err) { /* review M4: the weather row stays reachable; why the channels are not there */
+        if(a->tv_list_err==JF_TV_ERR_UNREACHABLE) { /* 1.6.4: friendlier words */
+            jf_paragraph(a,fb,6,y,JF_W-12,3,JF_MSG_TV_UNREACHABLE,PJ_UI_NOTE);
+            jf_text_fit(a,fb,6,y+40,JF_W-12,"Moved? Select finds it again.",JF_MUTED);
+        } else jf_paragraph(a,fb,6,y,JF_W-12,2,
+                     a->tv_list_err==JF_TV_ERR_SIGNIN?"The Jellyfin sign-in has expired":"The server did not send the TV channels",PJ_UI_NOTE);
+        if(a->tv_list_err==JF_TV_ERR_SIGNIN)jf_text_fit(a,fb,6,y+28,JF_W-12,"Select: sign in again here.",JF_MUTED);
+    } else if(!a->folder.count) {
+        if(a->busy==JF_R_CHANNELS)jf_paragraph(a,fb,6,y-1,JF_W-12,2,JF_MSG_TV_RETRYING,JF_MUTED);
+        else if(jf_tv_loading(a))jf_text_fit(a,fb,6,y-1,JF_W-12,"Loading channels...",JF_MUTED);
+        else { /* 1.6.4: no tuner or no channels on the server yet: say where they are added */
+            jf_paragraph(a,fb,6,y-1,JF_W-12,1,JF_MSG_TV_NONE,PJ_UI_NOTE);
+            jf_paragraph(a,fb,6,y+13,JF_W-12,3,JF_MSG_TV_NONE_STEP,JF_MUTED);
+        }
+    }
+    jf_text(a,fb,6,132,a->tv_exit==2?"Opening Local Weather...":a->tv_exit?"Closing...":
+            a->tv_list_err&&a->folder.focus>=extra?"A: try again    B: back":"A: watch    B: back",0x808080u);
+}
+/* A channel: the picture area is the video's (or black with a few words); number and name go in the strip under it
+ * for JF_TV_BANNER_MS after a tune, while tuning, and while Up/Down steps. */
+static inline void jf_draw_tv(const jf_app *a,uint16_t *fb) {
+    pj_osd_rect(fb,0,(int)JF_VIDEO_H,JF_W,JF_H-(int)JF_VIDEO_H,0x000000u);
+    if(a->message[0]&&!a->pictured) {
+        int w=jf_measure(a,a->message)+12;
+        pj_osd_rect(fb,80-w/2,52,w,15,0x000000u);jf_text(a,fb,80-w/2+6,54,a->message,a->tv_state==JF_TV_NOSIGNAL?PJ_UI_NOTE:JF_INK);
+    }
+    int banner=a->tv_state==JF_TV_SURF||a->tv_state==JF_TV_WAIT||a->tv_state==JF_TV_OPENING||a->tv_state==JF_TV_NOSIGNAL||
+               !a->pictured||a->tv_banner_until;
+    if(!banner) {
+        if(a->message[0])jf_text_fit(a,fb,4,(int)JF_VIDEO_H+1,152,a->message,JF_MUTED); /* "Waiting for the server..." */
+        return;
+    }
+    const char *number,*name;jf_tv_label(a,&number,&name);
+    pj_osd_rect(fb,2,(int)JF_VIDEO_H+2,32,20,PJ_UI_TV);pj_osd_rect(fb,3,(int)JF_VIDEO_H+3,30,18,pj_osd_mix(PJ_UI_TV,0x101016u,56u));
+    {int w=jf_measure(a,number);if(w>28)w=28;jf_text_fit(a,fb,2+(32-w)/2,(int)JF_VIDEO_H+6,29,number,JF_INK);}
+    jf_text_fit(a,fb,38,(int)JF_VIDEO_H+1,118,name[0]?name:"...",JF_INK);
+    jf_text_fit(a,fb,38,(int)JF_VIDEO_H+12,118,a->tv_state==JF_TV_SURF?"Up/Down: channel":a->tv_state==JF_TV_NOSIGNAL?"B: channels":
+                a->pictured&&a->message[0]?a->message:a->pictured?"B: channels":"Tuning...",JF_MUTED);
+}
 static inline void jf_app_draw(const jf_app *a,uint16_t *fb) {
     if(a->draw_part==JF_DRAW_LABEL) { /* a scrolling step: the name strip only, no artwork decoded */
         jf_label l;if(jf_focus_label(a,&l))jf_draw_focus_label(a,fb,&l);
@@ -437,12 +518,14 @@ static inline void jf_app_draw(const jf_app *a,uint16_t *fb) {
     case JF_S_MENU:jf_draw_menu(a,fb);break;
     case JF_S_CONNECT: {
         char line[48];snprintf(line,sizeof(line),"Connecting to %s",a->cfg.server_name[0]?a->cfg.server_name:"your server");
+        if(a->cfg.mode==JF_MODE_TUBE)snprintf(line,sizeof(line),"Opening " JF_TUBE_LIBRARY "...");
         jf_draw_center(a,fb,line,a->link_down?"Wi-Fi dropped. The console is rejoining; back in a moment.":
                        a->offline?"The server isn't answering. Trying again.":NULL,"B: back");break;}
     case JF_S_HOME:jf_draw_home(a,fb);break;
     case JF_S_FOLDER:jf_draw_folder(a,fb);break;
     case JF_S_DETAILS:jf_draw_details(a,fb);break;
-    case JF_S_PLAYER:jf_draw_player(a,fb);break;
+    case JF_S_PLAYER:if(a->cfg.mode==JF_MODE_TV)jf_draw_tv(a,fb);else jf_draw_player(a,fb);break;
+    case JF_S_CHANNELS:jf_draw_channels(a,fb);break;
     case JF_S_ERROR:jf_draw_center(a,fb,a->message,a->detail_line[0]?a->detail_line:NULL,
                                    a->err_kind==JF_ERR_UNREACHABLE?"A: retry  Select: find  B: back":
                                    a->err_kind==JF_ERR_SIGNIN?"A: retry  Select: sign in  B: back":"A: try again   B: back");break;

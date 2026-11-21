@@ -6,7 +6,8 @@
 **Contents:** [1. Set up the PC](#1-set-up-the-pc) · [2. Get the start-up menu image](#2-get-the-start-up-menu-image) ·
 [3. Install](#3-install) · [The window](#the-window) · [Wi-Fi and Jellyfin from the PC](#wi-fi-and-jellyfin-from-the-pc-optional) ·
 [Full backup before any FPGA change](#full-backup-before-any-fpga-change) · [Jellyfin sound](#jellyfin-sound-fpga-1840) ·
-[Update the Pocket link](#update-the-pocket-link-in-one-step-fpga-1841) · [Text menu](#text-menu) · [Your files](#where-your-files-are)
+[Update the Pocket link](#update-the-pocket-link-in-one-step-fpga-1841) · [Apps: TV and ChromaTube](#apps-tv-and-chromatube) ·
+[Weather location](#weather-location) · [Text menu](#text-menu) · [Your files](#where-your-files-are)
 
 ## 1. Set up the PC
 
@@ -37,7 +38,9 @@ Or build them yourself with `scripts\Build-ChromaticLauncher.ps1`
 2. Double-click **`Chromatic-Manager-Window.cmd`**.
 3. The Home tab checks the console (about 20 seconds; the first time, a full read takes about 6 minutes),
    then shows **one** main button. For a console without Jellymatic it is **Install**.
-4. Press it, read the small **Approve** window (it names the exact image), press **Approve**.
+4. Press it. The first time it asks **Add Local Weather?**: **Choose my place...**, **Use Orlando, FL** or **Skip
+   Local Weather** ([TV and Local Weather](TV-and-Local-Weather.md#the-first-install-asks)). Then read the small
+   **Approve** window (it names the exact image and what else it will write), press **Approve**.
 5. The first time, the Manager takes the [full backup](#full-backup-before-any-fpga-change) of both chips
    (about 15 minutes, nothing written). Then it writes the menu, reads it back, checks the whole flash and
    restarts the console to watch it start. Keep the cable in and the console on until it says **Done**.
@@ -54,7 +57,8 @@ Or build them yourself with `scripts\Build-ChromaticLauncher.ps1`
 </p>
 
 Updating later is the same: extract the newer release zip the same way; when `release\launcher\` holds a
-newer menu, Home shows **Update to x.y.z**.
+newer menu, Home shows **Update to x.y.z**. An update writes only the start-up menu's own area: your Wi-Fi, Jellyfin
+sign-in, app choices and weather location stay on the console.
 
 ## The window
 
@@ -63,7 +67,7 @@ newer menu, Home shows **Update to x.y.z**.
 | **Home** | The console's state in plain words and at most one main button; under **More**: Check again, Official update, Wi-Fi, New Jellyfin sign-in |
 | **Fix a problem** | Set up Jellyfin sound, Back up, Repair menu, Remove menu, Switch menu off, Restore original, Forget Jellyfin, the console chip (FPGA) jobs, Finish job, Close job (each button explains itself when you hover) |
 | **Remote Pilot** | See and press the console's menus from the PC ([Remote Pilot](Remote-Pilot.md)) |
-| **Settings** | AI control (off unless you allow it), Jellyfin on this PC |
+| **Settings** | AI control (off unless you allow it), Jellyfin on this PC, **Apps**, **Weather location**, **Live TV channels**, **ChromaTube server** ([Apps](#apps-tv-and-chromatube)) |
 | **About** | Folders, guide, licences |
 
 The **eye** button at the top hides private details (addresses, network names, user names, IDs) on screen,
@@ -153,17 +157,63 @@ SHA-256 in `scripts/chromatic_fpga.py`. Any other build is refused, including yo
 sources (it is almost never byte-identical), so use the official release files from
 `Jellymatic-FPGA-images-<version>.zip` on the [Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest).
 
+## Apps: TV and ChromaTube
+
+From start-up menu **1.6.5** you choose which apps the menu shows ([Apps on the start-up menu](Apps-on-the-start-up-menu.md)):
+
+1. **Settings › Apps** (text menu `a`): **TV** on or off, with **Local Weather only** (no server needed) or **Local
+   Weather and your Jellyfin server's Live TV channels**; **ChromaTube** on or off. A new console has TV with Local
+   Weather only and ChromaTube off.
+2. **Save and write to console**, then **Approve**: one journalled job writes the small apps record and checks the
+   whole flash on the chip; a game that is playing stops; the start-up menu, your Wi-Fi, Jellyfin sign-in and weather
+   location are not touched. **Use defaults** goes back to the defaults. The console can hide and show the apps itself
+   too (Select on the row; Other firmware › Show hidden apps).
+3. **Live TV channels** are optional and are added to your Jellyfin server, not to the console:
+   **Settings › Live TV channels** (text menu `l`; [TV and Local Weather](TV-and-Local-Weather.md#live-tv-optional)).
+4. **ChromaTube** needs its server tool and one Jellyfin library first: **Settings › ChromaTube server** (text menu
+   `y`; [ChromaTube](ChromaTube.md#set-it-up)).
+
+<p align="center"><img src="images/manager-apps.png" width="600" alt="Settings, Apps on the start-up menu"></p>
+
+Installs keep the apps record. If the console has none (after Remove menu or Restore original), an install of 1.6.5 or
+newer writes this PC's saved copy back in the same job, under the same Approve. Server changes for Live TV and
+ChromaTube follow the same rules as everything else in Jellymatic: add-only, a backup and a dry run first, proof
+afterwards, an administrator sign-in used once and never saved, and never a sign-out of your other devices.
+
+## Weather location
+
+**Settings › Weather location** (text menu: `w`) chooses the place for the TV row's Local Weather channel:
+
+1. Type a US ZIP code or "City, ST" and press **Find**. The match comes from a table on this PC (US Census Bureau
+   2024 Gazetteer, public domain): nothing is sent yet. If several places match, add the state ("Springfield, MO").
+2. Press the place: the Manager asks the National Weather Service (the only service your place goes to) for its
+   forecast area, time zone and six nearest weather stations, and shows them, with the pages the console will show.
+   The place shows masked until you turn the eye off.
+3. **Save and write to console**, then **Approve**: one journalled job writes the place to two small records of its
+   own, checks the whole flash on the chip, and only then saves a copy on this PC (in your private folder).
+
+**Make the area pages** (start-up menu 1.6.5 or newer), after step 2, makes your area's **location pack**: the
+Regional Forecast map of your state, a close-up of your area and the nearest radar, previewed in the window and written
+with the place under the same Approve. **Export pages...** / **Import pages...** save and use `.pjlp` pack files (same
+place only; every pack is checked in full; import only packs you trust). Text menu: `w`, then `import <file>` /
+`export <file>`. Details and pictures: [TV and Local Weather](TV-and-Local-Weather.md#your-areas-map-and-radar-pages-a-location-pack).
+
+Until you choose one, the console shows the built-in default, Orlando, FL. **Use default (Orlando, FL)** erases
+the place and its area pages (and the PC's copies) the same way. Install, update, downgrade and Switch menu off
+keep the place; Remove menu and Restore original erase it; an install puts the PC's copy back if the console lost it.
+Status and logs say "your location", never the place. An older start-up menu (before 1.6.3) ignores the record.
+
 ## Text menu
 
 `Chromatic-Manager.cmd` opens the same tool as a text menu: 1 status, 2 backup, 3 install, 4 remove,
-5 restore-stock, 6 guided official update, 7 Wi-Fi setup, 8 Jellyfin re-link, 9 Jellyfin forget. Every
-write asks you to type a one-time word shown on screen (for example `yes482`).
+5 restore-stock, 6 guided official update, 7 Wi-Fi setup, 8 Jellyfin re-link, 9 Jellyfin forget, a apps, w weather
+location, l Live TV channels, y ChromaTube server. Every write asks you to type a one-time word shown on screen (for example `yes482`).
 
 ## Where your files are
 
 | Folder | What |
 |---|---|
-| `%LOCALAPPDATA%\Jellymatic` | Everything personal: journals, backups, logs, settings, Wi-Fi list, Jellyfin settings |
+| `%LOCALAPPDATA%\Jellymatic` | Everything personal: journals, backups, logs, settings, Wi-Fi list, Jellyfin settings, your weather location |
 | `%USERPROFILE%\Jellymatic-Backups` | The second copy of every backup. It is usually on the same disk as the first: set `JELLYMATIC_SECOND_COPY` to another disk or a USB stick for real safety |
 
 Set `JELLYMATIC_HOME` to move the first one. None of it is ever part of the repository. Run

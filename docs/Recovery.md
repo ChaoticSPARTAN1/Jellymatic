@@ -6,6 +6,7 @@
 **Contents:** [How Jellymatic avoids breaking Chromatic OS](#how-jellymatic-avoids-breaking-chromatic-os) ·
 [If an install stops half-way](#if-an-install-stops-half-way) · [What the result means](#what-the-result-means) ·
 [Reinstall the start-up menu](#reinstall-or-repair-the-start-up-menu) · [Turn the menu off or remove it](#turn-the-menu-off-or-remove-it) ·
+[Go back to an older start-up menu](#go-back-to-an-older-start-up-menu) ·
 [Put the previous FPGA image back](#put-the-previous-fpga-image-back) · [Restore the original FPGA image](#restore-the-original-fpga-image) ·
 [Official updates and restoring Chromatic OS](#official-updates-and-restoring-chromatic-os) · [Common problems](#common-problems)
 
@@ -51,14 +52,26 @@ menu is missing, damaged or switched off.
 
 ## Turn the menu off or remove it
 
-| Button | What it does | Your Wi-Fi/Jellyfin set-up |
-|---|---|---|
-| **Switch menu off** | Erases only the menu program (power-safe); the console boots straight to the official firmware | Kept, for when you Install again |
-| **Remove menu** | Puts the official boot program and partition table back and erases the menu area | Erased; the console's Jellyfin sign-in is signed out on the server |
-| **Restore original** | Rewrites the ESP32 from your newest verified backup of the official firmware (settings kept). The first of those backups is your original, taken only from the official firmware as it comes | Erased; sign-in signed out |
+| Button | What it does | Your Wi-Fi/Jellyfin set-up | Weather location and area pages, app choices |
+|---|---|---|---|
+| **Switch menu off** | Erases only the menu program (power-safe); the console boots straight to the official firmware | Kept, for when you Install again | Kept |
+| **Remove menu** | Puts the official boot program and partition table back and erases the menu area | Erased; the console's Jellyfin sign-in is signed out on the server | Erased (the PC keeps its copies; the next install writes them back) |
+| **Restore original** | Rewrites the ESP32 from your newest verified backup of the official firmware (settings kept). The first of those backups is your original, taken only from the official firmware as it comes | Erased; sign-in signed out | Erased (the PC keeps its copies; the next install writes them back) |
 
 After **Remove menu** or **Restore original** the console is exactly the official layout. Install brings
 the menu back at any time.
+
+**Live TV and ChromaTube live on your Jellyfin server, not on the console**, so removing the menu does not remove
+them. Undo them with their own tools, which remove exactly what they added:
+[Chromavision: Undo everything](https://github.com/ChaoticSPARTAN1/Chromavision/blob/main/docs/Undo-everything.md),
+[ChromaTube: Undo everything](https://github.com/ChaoticSPARTAN1/ChromaTube/blob/main/docs/Undo-everything.md).
+
+## Go back to an older start-up menu
+
+Put the older release's files in `release\launcher\` and press **Update** (the Manager installs whatever version is
+there). Going back to a start-up menu before 1.6 removes the TV and ChromaTube rows; 1.6.0 to 1.6.3 ignore the app
+choices and show all five rows; before 1.6.3 the weather location is ignored. Both records stay on the console and are
+used again after the next update.
 
 ## Put the previous FPGA image back
 
@@ -112,5 +125,12 @@ Jellyfin sound** and **Update the Pocket link** again.
 | "Not a layout or firmware this tool knows" | Your console has firmware Jellymatic was not tested with. Nothing was written. Use the official updater first, or wait for a newer Jellymatic |
 | Menu does not appear | Is a cartridge in? Are you holding a button at power-on? |
 | Games will not start from the menu | Let go of all buttons; insert a cartridge |
+| The TV or ChromaTube row is missing | It is hidden: Other firmware › Show hidden apps, or Settings › Apps in the Manager ([Apps](Apps-on-the-start-up-menu.md)); ChromaTube is off on a new console |
+| Local Weather shows `--` and UPDATING for long | The console needs internet through your Wi-Fi; leave the channel and open it again |
+| Local Weather shows the wrong place | Settings › Weather location in the Manager; a start-up menu before 1.6.3 ignores it |
+| TV opens Local Weather only | That is the default; for live channels see [TV and Local Weather](TV-and-Local-Weather.md#live-tv-optional) |
+| TV with Live TV shows only the weather row | Your server is off, or has no Live TV tuner, or the console's user may not watch Live TV |
+| "Could not save" after Select on a row | Nothing changed on the menu; try again, or use Settings › Apps in the Manager |
+| "ChromaTube isn't set up on your server" | No library named exactly ChromaTube, or the console's user cannot see it ([ChromaTube](ChromaTube.md#set-it-up)) |
 
 See also the [FAQ](FAQ.md).

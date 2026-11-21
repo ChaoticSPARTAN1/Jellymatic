@@ -1,0 +1,20 @@
+radar-dry.gif ok radar-dry.lvl 480  # a dry evening: no echoes, made-up clear-air speckle round a radar at the picture's middle
+radar-pattern.gif ok radar-pattern.lvl 1397  # made-up showers (the reference test pattern), not real weather
+radar-pattern-interlaced.gif ok radar-pattern-interlaced.lvl 1379  # interlaced
+radar-pattern-local-table.gif ok radar-pattern-local-table.lvl 1397  # local colour table, no global one
+radar-pattern-tiny-blocks.gif ok radar-pattern-tiny-blocks.lvl 2715  # one-byte data blocks and a comment block
+radar-pattern-87a.gif ok radar-pattern-87a.lvl 1389  # no see-through index: index 0 is black
+radar-pattern-8bit.gif ok radar-pattern-8bit.lvl 2229  # 256 colours, 8-bit codes
+radar-noise-table-full.gif ok radar-noise-table-full.lvl 3402  # noisy picture: the string table fills and is cleared
+radar-pattern-pillow.gif ok radar-pattern-pillow.lvl 1467  # written by Pillow, another encoder
+radar-empty.gif ok radar-empty.lvl 239  # nothing but see-through: one very long run
+refuse-oversized.gif untouched - 3356  # 320 x 194: larger than asked for
+refuse-small.gif untouched - 291  # 80 x 48: smaller than asked for
+refuse-not-gif.gif untouched - 2008  # a PNG signature
+refuse-html.gif untouched - 109  # the map server's error text
+refuse-no-picture.gif untouched - 62  # header, colours, then the end
+refuse-code-size-9.gif untouched - 1397  # LZW code size 9
+refuse-code-size-1.gif untouched - 1397  # LZW code size 1
+stop-code-overflow.gif touched - 1398  # a code beyond the table after 400 codes
+stop-early-end.gif touched - 535  # 40 rows of data in a 97-row picture
+stop-truncated.gif touched - 698  # cut in the middle

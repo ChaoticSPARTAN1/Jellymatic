@@ -59,5 +59,6 @@ the start-up menu, where **Games** starts your cartridge.
 - A cartridge must be in the console (the app draws over it).
 - 2.4 GHz Wi-Fi only; no hotel sign-in pages.
 - Subtitles and search are not available yet.
+- Videos of the **ChromaTube** library play correctly only from the ChromaTube row ([ChromaTube](ChromaTube.md)).
 
 Next: [Hosting Jellyfin](Hosting-Jellyfin.md) · [Pocket link](Pocket-link.md)

@@ -1,0 +1,15 @@
+{
+ "/points/39.7392,-104.9903": "points_39.7392_-104.9903.json",
+ "/gridpoints/BOU/63,62/stations?limit=6": "gridpoints_BOU_63_62_stations_limit-6.json",
+ "/gridpoints/BOU/63,62/forecast": "gridpoints_BOU_63_62_forecast.json",
+ "/alerts/active?point=39.7392,-104.9903": "alerts_active_point-39.7392_-104.9903.json",
+ "/stations/KBJC/observations/latest": "stations_KBJC_observations_latest.json",
+ "/stations/KBKF/observations/latest": "stations_KBKF_observations_latest.json",
+ "/stations/KBKF/observations?limit=8": "stations_KBKF_observations_limit-8.json",
+ "/stations/KAPA/observations/latest": "stations_KAPA_observations_latest.json",
+ "/stations/KEIK/observations/latest": "stations_KEIK_observations_latest.json",
+ "/stations/KEIK/observations?limit=8": "stations_KEIK_observations_limit-8.json",
+ "/stations/KDEN/observations/latest": "stations_KDEN_observations_latest.json",
+ "/stations/KBDU/observations/latest": "stations_KBDU_observations_latest.json",
+ "/stations/KBJC/observations?limit=40": "stations_KBJC_observations_limit-40.json"
+}

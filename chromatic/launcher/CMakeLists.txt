@@ -4,11 +4,18 @@ cmake_minimum_required(VERSION 3.19)
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/..")
 # Recorded in the app description, so the PC tool can name the installed version.
 # Keep equal to PJ_LAUNCHER_VERSION in main/launcher_main.c.
-set(PROJECT_VER "1.5.1")
+set(PROJECT_VER "1.6.5")
 # On-console Wi-Fi / Jellyfin setup (docs/Design-notes.md). 0: compiled out entirely, the
 # launcher writes no flash. 1: setup_esp32.c and the audited provision_write.c are built in. Flip here only.
 set(PJ_ENABLE_SETUP 1)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+# Reproducible from any folder (CONFIG_APP_REPRODUCIBLE_BUILD maps ESP-IDF, the project and its components): the
+# repository's shared headers outside the components, pocket/ and shared/, are named relative to the repository in
+# the debug data too, so the app's recorded ELF SHA-256 does not depend on where the repository was cloned.
+get_filename_component(PJ_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+foreach(pj_dir pocket shared)
+    idf_build_set_property(COMPILE_OPTIONS "-fdebug-prefix-map=${PJ_REPO_ROOT}/${pj_dir}=/JELLYMATIC/${pj_dir}" APPEND)
+endforeach()
 project(chromatic_launcher)
 
 # IDF writes an app to the FIRST app slot, which here is the stock firmware at 0x10000.

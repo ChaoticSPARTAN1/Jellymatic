@@ -42,7 +42,8 @@ EXTRA = ['CONTRIBUTING.md', 'SECURITY.md', 'THIRD-PARTY-NOTICES.md', 'ADDITIONAL
 GROUPS = [                             # tabs; a page not named here goes under the last one
     ('Start', ['README.md', 'docs/Home.md', 'docs/What-you-need.md', 'docs/Before-you-start.md']),
     ('Guide', ['docs/Install-with-Chromatic-Manager.md', 'docs/First-run-on-the-console.md',
-               'docs/Using-Jellyfin-on-the-Chromatic.md', 'docs/Hosting-Jellyfin.md', 'docs/Pocket-link.md',
+               'docs/Using-Jellyfin-on-the-Chromatic.md', 'docs/Apps-on-the-start-up-menu.md',
+               'docs/TV-and-Local-Weather.md', 'docs/ChromaTube.md', 'docs/Hosting-Jellyfin.md', 'docs/Pocket-link.md',
                'docs/Remote-Pilot.md']),
     ('Recovery', ['docs/Recovery.md', 'docs/FAQ.md']),
     ('More', ['docs/Building-from-source.md', 'docs/AI-prompt-examples.md', 'docs/Credits-and-licences.md',
@@ -56,6 +57,7 @@ LABELS = {
     'THIRD-PARTY-NOTICES.md': 'Third-party notices', 'ADDITIONAL-TERMS.md': 'Additional terms',
     'docs/Before-you-start.md': 'Before you start', 'docs/Hosting-Jellyfin.md': 'Hosting Jellyfin',
     'docs/Recovery.md': 'Recovery', 'docs/Design-notes.md': 'Design notes',
+    'docs/Apps-on-the-start-up-menu.md': 'Apps on the menu', 'docs/TV-and-Local-Weather.md': 'TV and Local Weather',
 }
 # README-only art (GitHub strips CSS, so the README carries its theme in pictures); the page draws these itself.
 SKIP_ART = re.compile(r'^docs/images/readme/(?:section-|divider)')

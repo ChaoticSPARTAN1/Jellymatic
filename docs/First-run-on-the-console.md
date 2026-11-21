@@ -8,11 +8,15 @@
 
 ## Open Jellyfin
 
-1. Put a cartridge in and switch the console **on**. The start-up menu appears.
+1. Put a cartridge in and switch the console **on**. The start-up menu appears: **Games** (selected), **Jellyfin**,
+   **TV** (from start-up menu 1.6) and **Other firmware**; **ChromaTube** too once you switch it on.
 2. Highlight **Jellyfin** with the D-pad and press **A**.
 3. Press **Select** to open **Setup** (Wi-Fi networks / Jellyfin server).
 
-<p align="center"><img src="images/startup-menu.png" width="320" alt="Start-up menu">
+The Wi-Fi and the Jellyfin sign-in you set up here are shared by every app: TV and ChromaTube need nothing new on the
+console ([Apps on the start-up menu](Apps-on-the-start-up-menu.md)).
+
+<p align="center"><img src="images/startup-menu-apps.png" width="320" alt="Start-up menu">
 <img src="images/jellyfin-screen.png" width="320" alt="Jellyfin highlighted on the start-up menu"></p>
 
 ## Add your Wi-Fi
@@ -55,8 +59,10 @@ and [PocketFin](https://github.com/ChaoticSPARTAN1/PocketFin) on the Pocket. See
 
 | Where | Buttons |
 |---|---|
-| Start-up menu | D-pad choose · **A** start · **B** Games |
+| Start-up menu | D-pad choose · **A** start · **B** Games · **Select** on TV or ChromaTube: hide it ([Apps](Apps-on-the-start-up-menu.md#on-the-console)); elsewhere: Credits |
 | Jellyfin page | **A** open the library · **Select** setup · **B** or **Start** back to the menu |
+| TV | **Up/Down** choose · **A** watch · **B** back ([TV and Local Weather](TV-and-Local-Weather.md#buttons)) |
+| ChromaTube | D-pad choose · **A** open or play · **B** back ([ChromaTube](ChromaTube.md#using-it)) |
 | Setup screens | D-pad · **A** open · **B** back |
 | Holding any button while switching on | Skips the menu: straight to Games |
 

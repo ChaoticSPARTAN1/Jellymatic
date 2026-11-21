@@ -40,7 +40,10 @@ a = Analysis(
                             'chromatic_trial_runner', 'chromatic_provision', 'wifi_gateway',
                             'compose_chromatic_image', 'verify_chromatic_backup', 'hardware_preflight',
                             'remote_pilot_link', 'jellyfin_discovery', 'user_paths', 'getpass', 'secrets', 'ctypes',
-                            'http.server', 'http.client', 'socketserver', 'urllib.request'],
+                            'http.server', 'http.client', 'socketserver', 'urllib.request',
+                            # 1.6.5 area pages: make_location_pack, wx_mapdraw (chromatic/weather/tools, not analysed),
+                            # chromatic_location_pack, chromatic_weather_preview
+                            'gzip', 'math', 'dataclasses', 'struct', 'zlib', 'tempfile'],
     excludes=['tkinter', 'PySide6.QtNetwork', 'PySide6.QtQml', 'PySide6.QtQuick', 'PySide6.QtPdf',
               'PySide6.QtOpenGL', 'PySide6.QtSvg', 'PySide6.QtVirtualKeyboard'],
     noarchive=False,

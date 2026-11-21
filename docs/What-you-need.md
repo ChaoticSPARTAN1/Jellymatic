@@ -5,7 +5,7 @@
 
 **Contents:** [For the start-up menu and Jellyfin](#for-the-start-up-menu-and-jellyfin) ·
 [For Jellyfin sound and the Pocket link](#for-jellyfin-sound-and-the-pocket-link) ·
-[Not needed](#not-needed)
+[For TV and ChromaTube](#for-tv-and-chromatube-optional) · [Not needed](#not-needed)
 
 ## For the start-up menu and Jellyfin
 
@@ -34,11 +34,23 @@ work without them.
 | The **official release files** of the FPGA images 18.40 (sound) and 18.41 (sound + Pocket link) | The sound and the Pocket link **need the official release files** (`evt1_x2.fs` and `evt1_x2.bin` of each image), published separately as **release assets** of this project: download `Jellymatic-FPGA-images-<version>.zip` from the [Releases page](https://github.com/ChaoticSPARTAN1/Jellymatic/releases/latest) and extract it into your Jellymatic folder, keeping its folders. It puts each pair in its folder's `build\` (`fpga/images/sound-18.40/build/`, `fpga/images/link-18.41/build/`). This repository has the exact sources and receipts, but no binaries. **A build of your own will not match the pins** (it is almost never byte-identical to the reviewed image), and the Manager refuses it on purpose: only the reviewed image was tried on a console ([Building from source](Building-from-source.md#console-chip-fpga-images)). |
 | For the Pocket link: an **Analogue Pocket**, **PocketFin**, and a **link cable** | See [Pocket link](Pocket-link.md). |
 
+## For TV and ChromaTube (optional)
+
+| You need | For |
+|---|---|
+| Start-up menu **1.6.5 or newer** | The TV and ChromaTube rows, your own weather location and its area pages |
+| Wi-Fi with **internet access** and a **US place** | Local Weather (no Jellyfin server needed) |
+| Your Jellyfin server's **Live TV** with one tuner, set up with [Chromavision](https://github.com/ChaoticSPARTAN1/Chromavision)'s tools | Live channels |
+| A small **Docker** container beside your server and one library, set up with [ChromaTube](https://github.com/ChaoticSPARTAN1/ChromaTube)'s files and tool | ChromaTube |
+| An **administrator** sign-in, typed once on the PC | Adding the tuner or the library (the console keeps a normal user) |
+
+See [Apps on the start-up menu](Apps-on-the-start-up-menu.md).
+
 ## Not needed
 
 - No developer cartridge, UART adapter or soldering.
-- No account anywhere, and nothing is uploaded. Your Wi-Fi and Jellyfin details stay on your PC
-  (`%LOCALAPPDATA%\Jellymatic`) and your console.
+- No account anywhere, and nothing is uploaded. Your Wi-Fi and Jellyfin details and your weather location stay on
+  your PC (`%LOCALAPPDATA%\Jellymatic`) and your console.
 - No ModRetro files: Jellymatic never ships their firmware or updater. For official updates you use
   **ModRetro's own update tool**, downloaded from ModRetro ([Recovery](Recovery.md#official-updates-and-restoring-chromatic-os)).
 

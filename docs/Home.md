@@ -23,6 +23,9 @@ page here opens in your browser, with pictures, with no internet connection need
 | [Install with Chromatic Manager](Install-with-Chromatic-Manager.md) | You are ready to install or update |
 | [First run on the console](First-run-on-the-console.md) | Wi-Fi, Jellyfin sign-in, Pocket link set-up on the console |
 | [Using Jellyfin on the Chromatic](Using-Jellyfin-on-the-Chromatic.md) | Browsing and playing |
+| [Apps on the start-up menu](Apps-on-the-start-up-menu.md) | You want to know the rows, or switch TV or ChromaTube on or off |
+| [TV and Local Weather](TV-and-Local-Weather.md) | The weather channel, your weather location, optional live channels |
+| [ChromaTube](ChromaTube.md) | The optional video-channel row |
 | [Hosting Jellyfin](Hosting-Jellyfin.md) | Your server is not reachable over Wi-Fi yet |
 | [Pocket link](Pocket-link.md) | You have an Analogue Pocket and a link cable |
 | [Remote Pilot](Remote-Pilot.md) | You want to see and press the console's menus from the PC |
@@ -39,11 +42,13 @@ page here opens in your browser, with pictures, with no internet connection need
  Switch on ──► start-up menu ──┬─► Games ............ the console's own firmware, untouched (always there)
                                ├─► Jellyfin ......... browse and play over Wi-Fi (Select: set-up)
                                │      └─► Pocket link  feed an Analogue Pocket over a link cable
+                               ├─► TV ............... Local Weather; optional live channels (shown unless you hide it)
+                               ├─► ChromaTube ....... optional video channels through Jellyfin (off until you switch it on)
                                └─► Other firmware ... the stock firmware, listed and protected
  Hold any button while switching on ──► straight to Games, no menu
 ```
 
-<p align="center"><img src="images/startup-menu.png" width="320" alt="The start-up menu"></p>
+<p align="center"><img src="images/startup-menu-apps.png" width="320" alt="The start-up menu with Games, Jellyfin, TV, ChromaTube and Other firmware"></p>
 
 The PC side is **Chromatic Manager**: one window with one main button at a time. It backs up the
 console, installs or updates the start-up menu, reads every byte back, and can undo all of it.

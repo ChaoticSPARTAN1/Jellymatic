@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Additional terms: ADDITIONAL-TERMS.md
- * The launcher's ONE flash write: the provisioning record (docs/Design-notes.md),
- * two alternating sectors at the end of the launcher's own slot. Everything is in
+ * The launcher's ONE flash writer: the provisioning record (docs/Design-notes.md),
+ * two alternating sectors at the end of the launcher's own slot, and (1.6.4) the apps record
+ * (apps_record.h), two sectors of its own below the weather location. Everything is in
  * provision_write.c; this header is the contract. Nothing else in the launcher may erase or
  * write flash (scripts/test_chromatic_launcher.py source_rules and ELF checks). */
 #ifndef PJ_PROVISION_WRITE_H
 #define PJ_PROVISION_WRITE_H
 #include "provision.h"
+#include "apps_record.h" /* 1.6.4: the start-up menu's Hide / Show hidden apps writes the apps record here too */
 /* Absolute flash addresses: launcher slot 0x260000 + PJ_PROVISION_OFFSET_A/B. */
 #define PJ_PROV_FLASH_SLOT 0x260000u
 #define PJ_PROV_FLASH_A (PJ_PROV_FLASH_SLOT+PJ_PROVISION_OFFSET_A) /* 0x3FE000 */
@@ -54,7 +56,14 @@ enum {
  * one until the new one is verified, the new one after). Only PJ_PROV_FLASH_A and _B are ever
  * touched, 4096 bytes at a time. Wipes every secret from its own RAM before returning. */
 int pj_provision_commit_with(const pj_prov_flash *flash,const pj_prov_edit *edit);
+/* 1.6.4: the apps record (apps_record.h) with `flags`, by the same pattern on ITS two sectors only (PJ_APPS_FLASH_A
+ * and _B, never the setup record's): the copy in force is read and kept untouched; the other copy is erased, written
+ * with sequence + 1 and read back; it is in force only once it reads back whole. A power cut anywhere leaves the old
+ * record or the new one (or, with neither ever written, none: the defaults). The old copy is not erased afterwards:
+ * it holds no secret, and two good copies are stronger than one. PJ_PROV_WRITE_NO_CHANGE when it already says this. */
+int pj_apps_commit_with(const pj_prov_flash *flash,uint32_t flags);
 #ifdef ESP_PLATFORM
 int pj_provision_commit(const pj_prov_edit *edit); /* the device entry: esp_flash_* on the two sectors */
+int pj_apps_commit(uint32_t flags);               /* 1.6.4: the device entry for the apps record's two sectors */
 #endif
 #endif

@@ -186,7 +186,7 @@ static inline void pj_rmt_names(uint16_t bits,char *out,size_t size) {
     if(!n)snprintf(out,size,"NONE");
 }
 static inline size_t pj_rmt_status(pj_remote *r,const pj_link *k,uint32_t now) {
-    static const char *const items[PJ_ITEM_COUNT]={"games","jellyfin","other"};
+    static const char *const items[PJ_ITEM_COUNT]={"games","jellyfin","tv","chromatube","other"}; /* 1.6.0: two more rows */
     const pj_launcher *l=r->l;char held[48],countdown[12],fpga[12];int fpga_debug=0;
     pj_rmt_facts f;memset(&f,0,sizeof(f));if(r->facts)r->facts(r->ctx,&f);
     pj_rmt_fpga_words(&f,fpga,sizeof(fpga),&fpga_debug);

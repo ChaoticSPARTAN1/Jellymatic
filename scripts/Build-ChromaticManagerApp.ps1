@@ -56,6 +56,14 @@ foreach ($info in Get-ChildItem $Site -Directory -Filter '*.dist-info') {
 $PythonHome = (& $Python -c "import sys; print(sys.base_prefix)").Trim()
 New-Item -ItemType Directory -Force (Join-Path $Licenses 'python') | Out-Null
 Copy-Item (Join-Path $PythonHome 'LICENSE.txt') (Join-Path $Licenses 'python\LICENSE.txt') -Force
+
+# The weather page renderer for "Make the area pages" (the console's own drawing code, public sources only), next to
+# the exe where chromatic_weather_preview.renderer() looks first. Without gcc the app builds it into the temp folder
+# when it is first needed, or shows no preview.
+$Renderer = Join-Path $App 'wx_preview.exe'
+& $Python -B -c "import sys; sys.path.insert(0, r'$PSScriptRoot'); import chromatic_weather_preview as wp; sys.exit(0 if wp.build(r'$Renderer') else 3)"
+if ($LASTEXITCODE -ne 0) { Write-Warning 'wx_preview.exe not built (no gcc): the area-pages preview builds it on first use or is not shown.' }
+
 # Where this folder is, for when the exe is started from a shortcut (local only; dist\ is ignored by Git).
 Set-Content -Path (Join-Path $App 'project-root.txt') -Value $Root -Encoding UTF8
 Write-Host "Built $App\ChromaticManager.exe (for your own use; see the note at the top before sharing it)."

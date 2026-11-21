@@ -1,0 +1,11 @@
+{
+ "/points/28.4100,-81.2500": "points_28.4100_-81.2500.json",
+ "/gridpoints/MLB/32,63/stations?limit=6": "gridpoints_MLB_32_63_stations_limit_6.json",
+ "/points/28.7200,-81.9000": "points_28.7200_-81.9000.json",
+ "/points/28.0500,-81.7300": "points_28.0500_-81.7300.json",
+ "/points/28.5700,-80.8200": "points_28.5700_-80.8200.json",
+ "/points/30.3400,-81.6600": "points_30.3400_-81.6600.json",
+ "/gridpoints/JAX/66,65/stations?limit=1": "gridpoints_JAX_66_65_stations_limit_1.json",
+ "/points/26.6200,-81.8300": "points_26.6200_-81.8300.json",
+ "/gridpoints/TBW/101,42/stations?limit=1": "gridpoints_TBW_101_42_stations_limit_1.json"
+}
